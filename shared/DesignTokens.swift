@@ -20,6 +20,11 @@ enum DesignTokens {
     }
 }
 
+/// パーセントの記号位置・数字表記は言語で異なるため、記号を自前で付けずに FormatStyle へ委ねる
+func percentText(_ percent: Double) -> String {
+    (percent / 100).formatted(.percent.precision(.fractionLength(0)))
+}
+
 struct UsageBar: View {
     let fraction: Double
     var height: CGFloat = DesignTokens.barHeight

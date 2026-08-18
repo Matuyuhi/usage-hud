@@ -15,7 +15,7 @@ enum ClaudeFetcher {
                 let code = (response as? HTTPURLResponse)?.statusCode ?? -1
                 if code == 401 {
                     // token refresh は Claude Code 本体に任せる(refresh token rotation を壊さないため)
-                    throw FetchError.message("認証切れ。Claude Code を開くと更新されます")
+                    throw FetchError.message(String(localized: "Session expired — open Claude Code to refresh"))
                 }
                 if code == 429 {
                     throw FetchError.rateLimited
@@ -42,13 +42,13 @@ enum ClaudeFetcher {
         session.readUntilEOF()
         let raw = session.lines().joined()
         guard !raw.isEmpty else {
-            throw FetchError.message("Keychain に認証なし (claude でログインしてください)")
+            throw FetchError.message(String(localized: "No credentials in Keychain (sign in with claude)"))
         }
         guard let json = try? JSONSerialization.jsonObject(with: Data(raw.utf8)) as? [String: Any],
               let oauth = json["claudeAiOauth"] as? [String: Any],
               let token = oauth["accessToken"] as? String
         else {
-            throw FetchError.message("credential の形式が不明")
+            throw FetchError.message(String(localized: "Unrecognized credential format"))
         }
         return token
     }
@@ -56,7 +56,7 @@ enum ClaudeFetcher {
     private static func parse(_ data: Data) throws -> ServiceUsage {
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let limits = json["limits"] as? [[String: Any]]
-        else { throw FetchError.message("レスポンスの形式が不明") }
+        else { throw FetchError.message(String(localized: "Unrecognized response format")) }
 
         var gauges: [Gauge] = []
         for limit in limits {
@@ -65,24 +65,31 @@ enum ClaudeFetcher {
             let resets = (limit["resets_at"] as? String).flatMap(parseISODate)
             let label: String
             switch kind {
-            case "session": label = "5時間"
-            case "weekly_all": label = "週"
+            case "session": label = String(localized: "5h")
+            case "weekly_all": label = String(localized: "Week")
             case "weekly_scoped":
                 let model = ((limit["scope"] as? [String: Any])?["model"] as? [String: Any])?["display_name"] as? String
-                label = "週 (\(model ?? "モデル別"))"
+                label = String(format: String(localized: "Week (%@)"), model ?? String(localized: "Per model"))
             default: continue
             }
             gauges.append(Gauge(label: label, usedPercent: percent, resetsAt: resets))
         }
         var details: [DetailItem] = gauges.compactMap { gauge in
-            gauge.resetsAt.map { DetailItem(label: "\(gauge.label) リセット", value: formatDetailDate($0)) }
+            gauge.resetsAt.map {
+                DetailItem(label: String(format: String(localized: "%@ reset"), gauge.label),
+                           value: formatDetailDate($0))
+            }
         }
         if let extra = json["extra_usage"] as? [String: Any] {
+            let label = String(localized: "Extra credits")
             if (extra["is_enabled"] as? Bool) == true {
-                let used = (extra["used_credits"] as? Double).map { String(format: " (使用 %.0f)", $0) } ?? ""
-                details.append(DetailItem(label: "追加クレジット", value: "有効" + used))
+                // 使用量の有無で別キーを引く(訳文を連結すると言語ごとの語順に追従できない)
+                let value = (extra["used_credits"] as? Double)
+                    .map { String(format: String(localized: "On (used %@)"), groupedNumber($0)) }
+                    ?? String(localized: "On")
+                details.append(DetailItem(label: label, value: value))
             } else {
-                details.append(DetailItem(label: "追加クレジット", value: "無効"))
+                details.append(DetailItem(label: label, value: String(localized: "Off")))
             }
         }
         return ServiceUsage(gauges: gauges, detail: nil, error: nil, updatedAt: Date(), details: details)
@@ -117,32 +124,33 @@ enum CodexFetcher {
               let json = try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any],
               let result = json["result"] as? [String: Any],
               let rateLimits = result["rateLimits"] as? [String: Any]
-        else { throw FetchError.message("rateLimits を取得できず (codex login を確認)") }
+        else { throw FetchError.message(String(localized: "Could not read rateLimits (check codex login)")) }
 
         var gauges: [Gauge] = []
         var details: [DetailItem] = []
         if let individual = rateLimits["individualLimit"] as? [String: Any],
            let remaining = individual["remainingPercent"] as? Double {
             let resets = (individual["resetsAt"] as? Double).map { Date(timeIntervalSince1970: $0) }
-            gauges.append(Gauge(label: "月", usedPercent: 100 - remaining, resetsAt: resets))
+            gauges.append(Gauge(label: String(localized: "Month"), usedPercent: 100 - remaining, resetsAt: resets))
             if let limit = looseDouble(individual["limit"]), let used = looseDouble(individual["used"]) {
                 details.append(DetailItem(
-                    label: "月間クレジット", value: "\(groupedNumber(used)) / \(groupedNumber(limit))"))
+                    label: String(localized: "Monthly credits"),
+                    value: "\(groupedNumber(used)) / \(groupedNumber(limit))"))
             }
             if let resets {
-                details.append(DetailItem(label: "リセット", value: formatDetailDate(resets)))
+                details.append(DetailItem(label: String(localized: "Resets"), value: formatDetailDate(resets)))
             }
         }
         if let credits = rateLimits["credits"] as? [String: Any],
            let balance = looseDouble(credits["balance"]) {
-            details.append(DetailItem(label: "クレジット残高", value: groupedNumber(balance)))
+            details.append(DetailItem(label: String(localized: "Credit balance"), value: groupedNumber(balance)))
         }
         // プランによっては 5h/週のウィンドウ形式で返る
         for key in ["primary", "secondary"] {
             guard let window = rateLimits[key] as? [String: Any],
                   let used = window["used_percent"] as? Double else { continue }
             let minutes = window["window_minutes"] as? Double ?? 0
-            let label = minutes >= 10000 ? "週" : "5時間"
+            let label = minutes >= 10000 ? String(localized: "Week") : String(localized: "5h")
             let resets = (window["resets_in_seconds"] as? Double).map { Date().addingTimeInterval($0) }
             gauges.append(Gauge(label: label, usedPercent: used, resetsAt: resets))
         }
@@ -165,7 +173,8 @@ enum CopilotFetcher {
                 if code == 429 {
                     throw FetchError.rateLimited
                 }
-                throw FetchError.message("HTTP \(code) (gh auth status を確認)")
+                throw FetchError.message(
+                    String(format: String(localized: "HTTP %d (check gh auth status)"), code))
             }
             return try parse(data)
         } catch let error as FetchError {
@@ -180,7 +189,7 @@ enum CopilotFetcher {
         defer { session.terminate() }
         session.readUntilEOF()
         guard let token = session.lines().first(where: { !$0.isEmpty }) else {
-            throw FetchError.message("gh 未ログイン (gh auth login を実行)")
+            throw FetchError.message(String(localized: "Not signed in to gh (run gh auth login)"))
         }
         return token.trimmingCharacters(in: .whitespacesAndNewlines)
     }
@@ -188,7 +197,7 @@ enum CopilotFetcher {
     private static func parse(_ data: Data) throws -> ServiceUsage {
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let snapshots = json["quota_snapshots"] as? [String: Any]
-        else { throw FetchError.message("quota_snapshots が無い") }
+        else { throw FetchError.message(String(localized: "quota_snapshots missing")) }
 
         let reset = (json["quota_reset_date"] as? String).flatMap { string -> Date? in
             let formatter = DateFormatter()
@@ -204,20 +213,24 @@ enum CopilotFetcher {
             gauges.append(Gauge(label: "Premium", usedPercent: 100 - remaining, resetsAt: reset))
             if let left = premium["remaining"] as? Double, let total = premium["entitlement"] as? Double {
                 details.append(DetailItem(
-                    label: "Premium 残り", value: "\(groupedNumber(left)) / \(groupedNumber(total))"))
+                    label: String(localized: "Premium left"),
+                    value: "\(groupedNumber(left)) / \(groupedNumber(total))"))
             }
             if let overage = premium["overage_permitted"] as? Bool {
-                details.append(DetailItem(label: "超過利用", value: overage ? "許可" : "不可"))
+                details.append(DetailItem(
+                    label: String(localized: "Overage"),
+                    value: overage ? String(localized: "Allowed") : String(localized: "Not allowed")))
             }
         }
-        for (key, label) in [("chat", "チャット"), ("completions", "コード補完")] {
+        for (key, label) in [("chat", String(localized: "Chat")),
+                             ("completions", String(localized: "Completions"))] {
             if let snapshot = snapshots[key] as? [String: Any],
                (snapshot["unlimited"] as? Bool) == true {
-                details.append(DetailItem(label: label, value: "無制限"))
+                details.append(DetailItem(label: label, value: String(localized: "Unlimited")))
             }
         }
         if let reset {
-            details.append(DetailItem(label: "リセット", value: formatDetailDate(reset)))
+            details.append(DetailItem(label: String(localized: "Resets"), value: formatDetailDate(reset)))
         }
         return ServiceUsage(gauges: gauges, detail: json["copilot_plan"] as? String,
                             error: nil, updatedAt: Date(), details: details)
@@ -233,7 +246,7 @@ nonisolated enum FetchError: Error {
     var text: String {
         switch self {
         case .message(let text): return text
-        case .rateLimited: return "レート制限中 (自動で回復します)"
+        case .rateLimited: return String(localized: "Rate limited (recovers automatically)")
         }
     }
 
@@ -339,7 +352,8 @@ private nonisolated final class ProcessSession {
             if chunk.isEmpty { break }  // EOF
             buffer.append(chunk)
         }
-        throw FetchError.message("\(command) が応答しません (ログイン状態を確認)")
+        throw FetchError.message(
+            String(format: String(localized: "%@ is not responding (check that you are signed in)"), command))
     }
 
     func readUntilEOF() {

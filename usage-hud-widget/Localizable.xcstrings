@@ -1,0 +1,36 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "Launch usage-hud to see your usage here" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "usage-hud を起動するとここに表示されます"
+          }
+        }
+      }
+    },
+    "Remaining usage for Copilot / Claude Code / Codex" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copilot / Claude Code / Codex の残り使用量"
+          }
+        }
+      }
+    },
+    "Updated %@" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "更新 %@"
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}

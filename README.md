@@ -1,47 +1,54 @@
 # usage-hud
 
-Copilot / Claude Code / Codex の残り使用量と、CPU・メモリ使用率を一枚で見る macOS 常駐アプリ。
-メニューバーにアイコンを増やさず、`⌃⌥U` で好きなときに呼び出せます。
+[日本語](README.ja.md)
+
+A macOS background app that shows the remaining Copilot / Claude Code / Codex usage together with CPU and memory load, all on one panel.
+It adds no menu bar icon — press `⌃⌥U` whenever you want to see it.
 
 <img src="docs/panel.png" alt="usage-hud panel" width="346">
 
-## インストール
+## Install
 
 ```sh
 brew install --cask matuyuhi/tools/usage-hud
 ```
 
-ソースから入れる場合:
+From source:
 
 ```sh
 git clone https://github.com/Matuyuhi/usage-hud.git
 cd usage-hud && scripts/install.sh
 ```
 
-## 使い方
+## Usage
 
-- `⌃⌥U` でパネルを開閉（パネル外クリックでも閉じます）
-- 各サービス名をクリックすると詳細（実クレジット数・リセット日時など）を展開
-- 歯車メニューから「ログイン時に起動」を設定
-- 通知センターのウィジェットは「編集 → ウィジェットを追加 → Usage HUD」で追加
+- `⌃⌥U` toggles the panel (clicking outside it closes it too)
+- Click a service name to expand its details (raw credit counts, reset time, and so on)
+- Turn on "Launch at login" from the gear menu
+- Add the Notification Center widget from "Edit Widgets → Usage HUD"
 
-## 必要なもの
+## Requirements
 
-使用量は各ツールのログイン情報から読み取ります。表示したいものだけログインしていれば十分です。
+Usage is read from the credentials each tool already stores, so signing in to only the tools you care about is enough.
 
-| 表示 | 必要なもの |
+| Shown | Requires |
 |---|---|
-| Claude Code | Claude Code でログイン済みであること |
-| Codex | `codex` CLI でログイン済みであること |
-| Copilot | `gh auth login` 済みであること |
+| Claude Code | Signed in to Claude Code |
+| Codex | Signed in with the `codex` CLI |
+| Copilot | `gh auth login` completed |
 
-いずれも読み取りのみで、認証情報の書き換えや更新は行いません。
+All of them are read-only: credentials are never rewritten or refreshed.
 
-## 注意
+## Language
 
-各サービスの使用量 API は公開仕様ではないため、提供側の変更で取得できなくなることがあります。
-取得に失敗したサービスは、直前の値とエラー内容を並べて表示します。
+The interface follows the system language and ships with English and Japanese.
+To pin one of them, use System Settings > General > Language & Region > Applications.
 
-## ライセンス
+## Notes
+
+The usage APIs of these services are not public specifications, so a change on their side can stop the fetch from working.
+A service that fails to fetch keeps showing its last value next to the error.
+
+## License
 
 MIT

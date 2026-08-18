@@ -30,62 +30,60 @@ struct UsageWidgetView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             if let snapshot = entry.snapshot {
-                ServiceLine(name: "Claude", usage: snapshot.claude, compact: family == .systemSmall)
-                ServiceLine(name: "Codex", usage: snapshot.codex, compact: family == .systemSmall)
-                ServiceLine(name: "Copilot", usage: snapshot.copilot, compact: family == .systemSmall)
+                // サービス名と残量の列幅は実際の文言から揃える(言語で語長が変わるため固定値で持たない)
+                Grid(alignment: .leading, horizontalSpacing: 6, verticalSpacing: 6) {
+                    serviceLine(name: "Claude", usage: snapshot.claude)
+                    serviceLine(name: "Codex", usage: snapshot.codex)
+                    serviceLine(name: "Copilot", usage: snapshot.copilot)
+                }
                 Spacer(minLength: 0)
                 HStack {
-                    Text("更新 \(snapshot.fetchedAt.formatted(date: .omitted, time: .shortened))")
+                    Text("Updated \(snapshot.fetchedAt.formatted(date: .omitted, time: .shortened))")
                     Spacer()
                     if family != .systemSmall, let system = snapshot.system {
-                        Text(String(format: "CPU %.0f%% · MEM %.0f/%.0fGB",
-                                    system.cpuPercent, system.memUsedGB, system.memTotalGB))
+                        Text(systemText(system))
                     }
                 }
                 .font(.system(size: 10))
                 .foregroundStyle(.secondary)
             } else {
-                Text("usage-hud を起動するとここに表示されます")
+                Text("Launch usage-hud to see your usage here")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
         }
         .containerBackground(.fill.tertiary, for: .widget)
     }
-}
 
-private struct ServiceLine: View {
-    let name: String
-    let usage: ServiceUsage?
-    let compact: Bool
-
-    // 最も逼迫しているゲージを代表として出す
-    private var worst: Gauge? {
-        usage?.gauges.max { $0.usedPercent < $1.usedPercent }
-    }
-
-    var body: some View {
-        HStack(spacing: 6) {
+    // GridRow は Grid の直接の子である必要があるため、行はメソッドで組む(View に包まない)
+    private func serviceLine(name: String, usage: ServiceUsage?) -> some View {
+        // 最も逼迫しているゲージを代表として出す
+        let worst = usage?.gauges.max { $0.usedPercent < $1.usedPercent }
+        return GridRow {
             Text(name)
                 .font(.caption2.weight(.semibold))
-                .frame(width: compact ? 44 : 52, alignment: .leading)
             if let worst {
                 UsageBar(fraction: worst.usedPercent / 100, height: DesignTokens.widgetBarHeight)
-                Text(String(format: "%.0f%%", worst.remainingPercent))
+                Text(percentText(worst.remainingPercent))
                     .font(.caption2.monospacedDigit())
-                    .frame(width: 34, alignment: .trailing)
+                    .gridColumnAlignment(.trailing)
             } else if usage?.error != nil {
                 Image(systemName: "exclamationmark.triangle")
                     .font(.caption2)
                     .foregroundStyle(.orange)
-                Spacer()
+                Color.clear.gridCellUnsizedAxes([.horizontal, .vertical])
             } else {
                 Text("-")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
-                Spacer()
+                Color.clear.gridCellUnsizedAxes([.horizontal, .vertical])
             }
         }
+    }
+
+    private func systemText(_ system: SystemSample) -> String {
+        "CPU \(percentText(system.cpuPercent)) · MEM "
+            + String(format: "%.0f/%.0fGB", system.memUsedGB, system.memTotalGB)
     }
 }
 
@@ -97,7 +95,7 @@ struct usage_hud_widget: Widget {
             UsageWidgetView(entry: entry)
         }
         .configurationDisplayName("Usage HUD")
-        .description("Copilot / Claude Code / Codex の残り使用量")
+        .description("Remaining usage for Copilot / Claude Code / Codex")
         .supportedFamilies([.systemSmall, .systemMedium])
     }
 }

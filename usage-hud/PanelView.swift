@@ -6,15 +6,22 @@ struct PanelView: View {
     var requestResize: () -> Void
     @State private var expanded: Set<String> = []
 
+    /// 行間は Grid 全体で共通なので、セクションの見出し側に上余白を足して区切りを作る
+    private let sectionGap: CGFloat = 8
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        // ゲージ行を 1 つの Grid に集めて、ラベルと数値の列幅を実際の文言から揃える
+        // (言語によって語長が変わるため、列幅は固定値で持たない)
+        Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 6) {
             header
             serviceSection(key: "claude", name: "Claude Code", usage: store.snapshot?.claude)
             serviceSection(key: "codex", name: "Codex", usage: store.snapshot?.codex)
             serviceSection(key: "copilot", name: "Copilot", usage: store.snapshot?.copilot)
             Divider()
+                .padding(.top, sectionGap)
             systemSection
             footer
+                .padding(.top, sectionGap)
         }
         .padding(16)
         .frame(width: DesignTokens.panelWidth)
@@ -34,64 +41,89 @@ struct PanelView: View {
         DispatchQueue.main.async { requestResize() }
     }
 
+    @ViewBuilder
     private func serviceSection(key: String, name: String, usage: ServiceUsage?) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            SectionHeader(
-                name: name,
-                caption: usage?.detail,
-                isExpanded: expanded.contains(key),
-                hasDetails: !(usage?.details ?? []).isEmpty
-            ) { toggle(key) }
-            if let usage {
-                if let error = usage.error {
-                    // 前回値が残っている場合はエラーとゲージを併記する(値だけ消えると誤解を生む)
-                    Label(usage.gauges.isEmpty ? error : "\(error) — 前回値を表示中",
-                          systemImage: "exclamationmark.triangle")
-                        .font(.caption)
-                        .foregroundStyle(.orange)
-                }
-                ForEach(usage.gauges) { gauge in
-                    GaugeRow(
-                        label: gauge.label,
-                        fraction: gauge.usedPercent / 100,
-                        trailing: String(format: "残り %.0f%%", gauge.remainingPercent),
-                        subtitle: gauge.resetsAt.map { "→ " + formatDetailDate($0) })
-                }
-                if expanded.contains(key), !usage.gauges.isEmpty, let details = usage.details {
-                    DetailList(items: details)
-                }
-            } else {
-                Text("取得中…")
+        SectionHeader(
+            name: name,
+            caption: usage?.detail,
+            isExpanded: expanded.contains(key),
+            hasDetails: !(usage?.details ?? []).isEmpty
+        ) { toggle(key) }
+            .padding(.top, sectionGap)
+        if let usage {
+            if let error = usage.error {
+                // 前回値が残っている場合はエラーとゲージを併記する(値だけ消えると誤解を生む)
+                Label(usage.gauges.isEmpty
+                      ? error
+                      : String(format: String(localized: "%@ — showing last value"), error),
+                      systemImage: "exclamationmark.triangle")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.orange)
+            }
+            ForEach(usage.gauges) { gauge in
+                gaugeRow(
+                    label: gauge.label,
+                    fraction: gauge.usedPercent / 100,
+                    trailing: String(format: String(localized: "%@ left"), percentText(gauge.remainingPercent)),
+                    subtitle: gauge.resetsAt.map { "→ " + formatDetailDate($0) })
+            }
+            if expanded.contains(key), !usage.gauges.isEmpty, let details = usage.details {
+                DetailList(items: details)
+            }
+        } else {
+            Text("Loading…")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    @ViewBuilder
+    private var systemSection: some View {
+        SectionHeader(
+            name: String(localized: "System"),
+            caption: nil,
+            isExpanded: expanded.contains("system"),
+            hasDetails: true
+        ) { toggle("system") }
+            .padding(.top, sectionGap)
+        if let system = store.system {
+            gaugeRow(
+                label: "CPU",
+                fraction: system.cpuPercent / 100,
+                trailing: percentText(system.cpuPercent),
+                subtitle: nil)
+            gaugeRow(
+                label: String(localized: "Memory"),
+                fraction: Double(system.memUsedBytes) / Double(max(system.memTotalBytes, 1)),
+                trailing: String(format: "%.1f / %.0f GB", system.memUsedGB, system.memTotalGB),
+                subtitle: nil)
+            if expanded.contains("system") {
+                DetailList(items: memoryDetails(system))
             }
         }
     }
 
-    private var systemSection: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            SectionHeader(
-                name: "システム",
-                caption: nil,
-                isExpanded: expanded.contains("system"),
-                hasDetails: true
-            ) { toggle("system") }
-            if let system = store.system {
-                GaugeRow(
-                    label: "CPU",
-                    fraction: system.cpuPercent / 100,
-                    trailing: String(format: "%.0f%%", system.cpuPercent),
-                    subtitle: nil)
-                GaugeRow(
-                    label: "メモリ",
-                    fraction: Double(system.memUsedBytes) / Double(max(system.memTotalBytes, 1)),
-                    trailing: String(format: "%.1f / %.0f GB", system.memUsedGB, system.memTotalGB),
-                    subtitle: nil)
-                if expanded.contains("system") {
-                    DetailList(items: memoryDetails(system))
+    // GridRow は Grid の直接の子である必要があるため、行はメソッドで組む(View に包まない)
+    private func gaugeRow(
+        label: String, fraction: Double, trailing: String, subtitle: String?
+    ) -> some View {
+        GridRow {
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            UsageBar(fraction: fraction)
+            VStack(alignment: .trailing, spacing: 0) {
+                Text(trailing)
+                    .font(.caption.monospacedDigit())
+                if let subtitle {
+                    Text(subtitle)
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
                 }
             }
+            .gridColumnAlignment(.trailing)
         }
+        .accessibilityElement(children: .combine)
     }
 
     private func memoryDetails(_ system: SystemSample) -> [DetailItem] {
@@ -99,9 +131,9 @@ struct PanelView: View {
             String(format: "%.1f GB", Double(bytes ?? 0) / 1_073_741_824)
         }
         return [
-            DetailItem(label: "アクティブ", value: gb(system.memActiveBytes)),
-            DetailItem(label: "確保済み (wired)", value: gb(system.memWiredBytes)),
-            DetailItem(label: "圧縮", value: gb(system.memCompressedBytes)),
+            DetailItem(label: String(localized: "Active"), value: gb(system.memActiveBytes)),
+            DetailItem(label: String(localized: "Wired"), value: gb(system.memWiredBytes)),
+            DetailItem(label: String(localized: "Compressed"), value: gb(system.memCompressedBytes)),
         ]
     }
 
@@ -120,11 +152,12 @@ struct PanelView: View {
             }
             .buttonStyle(.plain)
             .disabled(store.isRefreshing)
-            .accessibilityLabel("今すぐ更新")
+            .accessibilityLabel("Refresh now")
             Menu {
                 LaunchAtLoginToggle()
+                LanguagePicker()
                 Divider()
-                Button("終了") { NSApp.terminate(nil) }
+                Button("Quit") { NSApp.terminate(nil) }
             } label: {
                 Image(systemName: "gearshape")
                     .frame(width: DesignTokens.minHitTarget, height: DesignTokens.minHitTarget)
@@ -133,17 +166,17 @@ struct PanelView: View {
             .buttonStyle(.plain)
             .menuIndicator(.hidden)
             .fixedSize()
-            .accessibilityLabel("設定")
+            .accessibilityLabel("Settings")
         }
     }
 
     private var footer: some View {
         HStack {
             if let fetched = store.snapshot?.fetchedAt {
-                Text("更新 \(fetched.formatted(date: .omitted, time: .shortened))")
+                Text("Updated \(fetched.formatted(date: .omitted, time: .shortened))")
             }
             Spacer()
-            Text("⌃⌥U で開閉")
+            Text("⌃⌥U to toggle")
         }
         .font(.caption2)
         .foregroundStyle(.secondary)
@@ -162,8 +195,8 @@ private struct SectionHeader: View {
             Button(action: onToggle) { labelRow }
                 .buttonStyle(.plain)
                 .accessibilityLabel(name)
-                .accessibilityValue(isExpanded ? "詳細を表示中" : "詳細は非表示")
-                .accessibilityHint("詳細の表示を切り替え")
+                .accessibilityValue(isExpanded ? "Details shown" : "Details hidden")
+                .accessibilityHint("Toggle details")
         } else {
             labelRow
         }
@@ -213,31 +246,18 @@ private struct DetailList: View {
     }
 }
 
-private struct GaugeRow: View {
-    let label: String
-    let fraction: Double
-    let trailing: String
-    let subtitle: String?
+private struct LanguagePicker: View {
+    @State private var selection = LanguageSetting.current
 
     var body: some View {
-        HStack(spacing: 8) {
-            Text(label)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .frame(width: 74, alignment: .leading)
-            UsageBar(fraction: fraction)
-            VStack(alignment: .trailing, spacing: 0) {
-                Text(trailing)
-                    .font(.caption.monospacedDigit())
-                if let subtitle {
-                    Text(subtitle)
-                        .font(.system(size: 10))
-                        .foregroundStyle(.secondary)
-                }
+        Picker("Language", selection: $selection) {
+            ForEach(AppLanguage.allCases) { language in
+                Text(language.label).tag(language)
             }
-            .frame(width: 84, alignment: .trailing)
         }
-        .accessibilityElement(children: .combine)
+        .onChange(of: selection) { _, language in
+            LanguageSetting.apply(language)
+        }
     }
 }
 
@@ -245,7 +265,7 @@ private struct LaunchAtLoginToggle: View {
     @State private var isEnabled = SMAppService.mainApp.status == .enabled
 
     var body: some View {
-        Toggle("ログイン時に起動", isOn: Binding(
+        Toggle("Launch at login", isOn: Binding(
             get: { isEnabled },
             set: { newValue in
                 do {
