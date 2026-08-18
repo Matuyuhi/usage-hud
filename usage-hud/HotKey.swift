@@ -39,7 +39,8 @@ final class HotKey {
         }
     }
 
-    deinit {
+    // 破棄時の解除も登録時と同じ MainActor で行う(Carbon のハンドラは登録スレッドに紐づく)
+    isolated deinit {
         if let hotKeyRef { UnregisterEventHotKey(hotKeyRef) }
         if let eventHandler { RemoveEventHandler(eventHandler) }
     }

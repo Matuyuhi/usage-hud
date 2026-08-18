@@ -226,7 +226,7 @@ enum CopilotFetcher {
 
 // MARK: - Helpers
 
-enum FetchError: Error {
+nonisolated enum FetchError: Error {
     case message(String)
     case rateLimited
 
@@ -245,7 +245,7 @@ enum FetchError: Error {
 }
 
 /// 微秒精度の fractional seconds を含む ISO8601 に対応(ISO8601DateFormatter は 3 桁までしか受けない)
-func parseISODate(_ string: String) -> Date? {
+nonisolated func parseISODate(_ string: String) -> Date? {
     let formatter = ISO8601DateFormatter()
     if let date = formatter.date(from: string) { return date }
     // fractional seconds を除去して再試行
@@ -258,13 +258,13 @@ func parseISODate(_ string: String) -> Date? {
     return nil
 }
 
-func formatDetailDate(_ date: Date) -> String {
+nonisolated func formatDetailDate(_ date: Date) -> String {
     let formatter = DateFormatter()
     formatter.dateFormat = "M/d HH:mm"
     return formatter.string(from: date)
 }
 
-func groupedNumber(_ value: Double) -> String {
+nonisolated func groupedNumber(_ value: Double) -> String {
     let formatter = NumberFormatter()
     formatter.numberStyle = .decimal
     formatter.maximumFractionDigits = 0
@@ -272,7 +272,7 @@ func groupedNumber(_ value: Double) -> String {
 }
 
 /// codex の rateLimits は数値が文字列で返る("550" 等)ため両対応で取り出す
-func looseDouble(_ any: Any?) -> Double? {
+nonisolated func looseDouble(_ any: Any?) -> Double? {
     if let value = any as? Double { return value }
     if let string = any as? String { return Double(string) }
     return nil
@@ -296,7 +296,7 @@ private func runOffMain<T: Sendable>(_ work: @escaping @Sendable () throws -> T)
 
 /// Homebrew 等の CLI を PATH 解決込みで起動し、行単位の対話(送信→応答待ち)を行うセッション。
 /// GUI アプリの PATH に CLI の場所が含まれないことがあるため、既知の bin ディレクトリを前置する
-private final class ProcessSession {
+private nonisolated final class ProcessSession {
     private let process = Process()
     private let stdinPipe = Pipe()
     private let stdoutPipe = Pipe()

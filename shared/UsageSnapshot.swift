@@ -1,6 +1,7 @@
 import Foundation
 
-struct UsageSnapshot: Codable {
+// 取得処理はバックグラウンドで走るため、データ型と保存先は MainActor から切り離す
+nonisolated struct UsageSnapshot: Codable {
     var claude: ServiceUsage?
     var codex: ServiceUsage?
     var copilot: ServiceUsage?
@@ -8,7 +9,7 @@ struct UsageSnapshot: Codable {
     var fetchedAt: Date
 }
 
-struct ServiceUsage: Codable {
+nonisolated struct ServiceUsage: Codable {
     var gauges: [Gauge]
     var detail: String?
     var error: String?
@@ -21,13 +22,13 @@ struct ServiceUsage: Codable {
     }
 }
 
-struct DetailItem: Codable, Identifiable {
+nonisolated struct DetailItem: Codable, Identifiable {
     var id: String { label }
     var label: String
     var value: String
 }
 
-struct Gauge: Codable, Identifiable {
+nonisolated struct Gauge: Codable, Identifiable {
     var id: String { label }
     var label: String
     var usedPercent: Double
@@ -36,7 +37,7 @@ struct Gauge: Codable, Identifiable {
     var remainingPercent: Double { max(0, 100 - usedPercent) }
 }
 
-struct SystemSample: Codable {
+nonisolated struct SystemSample: Codable {
     var cpuPercent: Double
     var memUsedBytes: UInt64
     var memTotalBytes: UInt64
@@ -49,7 +50,7 @@ struct SystemSample: Codable {
     var memTotalGB: Double { Double(memTotalBytes) / 1_073_741_824 }
 }
 
-enum SharedStore {
+nonisolated enum SharedStore {
     // App Group ではなく実ホーム直下の Application Support を使う。
     // App Group は ID にチーム ID prefix が必須で、署名チームを持たない ad-hoc ビルドと両立しないため。
     // sandbox 内の widget は NSHomeDirectory がコンテナを指すので getpwuid で実ホームを引き、

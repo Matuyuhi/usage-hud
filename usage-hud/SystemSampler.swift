@@ -60,7 +60,12 @@ final class SystemSampler {
             }
         }
         guard result == KERN_SUCCESS else { return (0, 0, 0) }
-        let pageSize = UInt64(vm_kernel_page_size)
+        // グローバル変数の vm_kernel_page_size は並行アクセス安全でないため関数版で引く
+        var kernelPageSize: vm_size_t = 0
+        guard host_page_size(mach_host_self(), &kernelPageSize) == KERN_SUCCESS else {
+            return (0, 0, 0)
+        }
+        let pageSize = UInt64(kernelPageSize)
         return (UInt64(stats.active_count) * pageSize,
                 UInt64(stats.wire_count) * pageSize,
                 UInt64(stats.compressor_page_count) * pageSize)
