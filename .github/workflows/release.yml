@@ -1,0 +1,140 @@
+name: Release
+
+# リリースはタグ手打ち不要。VERSION ファイルを「リリース信号」にする:
+#   main へ push → その v<version> が未公開なら
+#   タグ作成 + universal .app をビルド + Release 添付 + tap cask 更新。
+#
+# 重要: GitHub の immutable releases 対策として、Release は draft で作成 →
+# 資産を upload → 最後に publish する（公開後は資産を変更できないため）。
+#
+# 前提シークレット: HOMEBREW_TAP_TOKEN
+#   Matuyuhi/homebrew-tools への書き込み権を持つ PAT（fine-grained: Contents=R/W）。
+#   未設定なら update-tap はスキップ（publish までは走る）。
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'VERSION'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  guard:
+    runs-on: ubuntu-24.04
+    outputs:
+      release: ${{ steps.check.outputs.release }}
+      version: ${{ steps.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          VER="$(tr -d '[:space:]' < VERSION)"
+          echo "version=$VER" >> "$GITHUB_OUTPUT"
+          DRAFT="$(gh release view "v$VER" --repo "$REPO" --json isDraft -q '.isDraft' 2>/dev/null || echo missing)"
+          if [ "$DRAFT" = "false" ]; then
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            echo "v$VER is already published; nothing to do."
+          else
+            echo "release=true" >> "$GITHUB_OUTPUT"
+            echo "v$VER not published (state: $DRAFT); will release."
+          fi
+
+  create-release:
+    needs: guard
+    if: needs.guard.outputs.release == 'true'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Create a DRAFT release (immutable-safe; assets are added while draft)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          VER: ${{ needs.guard.outputs.version }}
+          SHA: ${{ github.sha }}
+        run: |
+          gh release delete "v$VER" --repo "$REPO" --yes --cleanup-tag 2>/dev/null || true
+          gh release create "v$VER" --repo "$REPO" --draft --target "$SHA" \
+            --title "v$VER" --generate-notes
+
+  build:
+    needs: [guard, create-release]
+    if: needs.guard.outputs.release == 'true'
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Build universal app
+        run: |
+          xcodebuild -project usage-hud.xcodeproj -scheme usage-hud \
+            -configuration Release -derivedDataPath build \
+            -destination 'generic/platform=macOS' \
+            ARCHS="arm64 x86_64" ONLY_ACTIVE_ARCH=NO \
+            MARKETING_VERSION="${{ needs.guard.outputs.version }}" \
+            build
+
+      - name: Package
+        run: ditto -c -k --keepParent build/Build/Products/Release/usage-hud.app usage-hud.zip
+
+      - name: Upload to the draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          VER: ${{ needs.guard.outputs.version }}
+        run: gh release upload "v$VER" usage-hud.zip --repo "$REPO" --clobber
+
+  publish:
+    needs: [guard, build]
+    if: needs.guard.outputs.release == 'true'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          VER: ${{ needs.guard.outputs.version }}
+        run: gh release edit "v$VER" --repo "$REPO" --draft=false
+
+  update-tap:
+    needs: [guard, publish]
+    if: needs.guard.outputs.release == 'true'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Generate cask from template and push to tap
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          VER: ${{ needs.guard.outputs.version }}
+          TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          if [ -z "$TAP_TOKEN" ]; then
+            echo "HOMEBREW_TAP_TOKEN is not set; skipping tap update."
+            echo "Release assets are published; update Matuyuhi/homebrew-tools/Casks/usage-hud.rb manually."
+            exit 0
+          fi
+
+          gh release download "v$VER" --repo "$REPO" -p usage-hud.zip
+          SHA="$(sha256sum usage-hud.zip | cut -d' ' -f1)"
+
+          cp packaging/homebrew/usage-hud.rb cask.rb
+          sed -i -e "s/__VERSION__/${VER}/g" -e "s/__SHA_MACOS__/${SHA}/g" cask.rb
+
+          git clone --depth 1 "https://x-access-token:${TAP_TOKEN}@github.com/Matuyuhi/homebrew-tools.git" tap
+          mkdir -p tap/Casks
+          cp cask.rb tap/Casks/usage-hud.rb
+          cd tap
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Casks/usage-hud.rb
+          if git diff --cached --quiet; then
+            echo "Cask unchanged; nothing to push."
+          else
+            git commit -m "usage-hud ${VER}"
+            git push
+          fi
