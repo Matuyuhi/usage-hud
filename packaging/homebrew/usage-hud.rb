@@ -10,7 +10,7 @@ cask "usage-hud" do
   desc "Menu-less HUD for Copilot / Claude Code / Codex quota and system load"
   homepage "https://github.com/Matuyuhi/usage-hud"
 
-  depends_on macos: ">= :tahoe"
+  depends_on macos: :tahoe
 
   app "usage-hud.app"
 
