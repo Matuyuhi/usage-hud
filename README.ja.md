@@ -69,11 +69,13 @@ UI はシステムの言語設定に従い、英語と日本語を収録して�
 ```sh
 scripts/install.sh            # Release ビルドして /Applications に入れる
 scripts/check-invariants.sh   # CI が見る署名・sandbox・認証まわりの決めごとチェック
+scripts/bump-version.sh patch # VERSION と xcodeproj のバージョンをまとめて上げる
 ```
 
 PR ではこの 2 つが回る（macOS での universal Release ビルドと、上の invariant チェック）。
 リリースは `VERSION` が信号なので、「Bump version」ワークフローを回して、開いた PR をマージすると
-リリース公開と Homebrew cask 更新まで進む。
+リリース公開と Homebrew cask 更新まで進む。bump では xcodeproj の `MARKETING_VERSION` /
+`CURRENT_PROJECT_VERSION` も一緒に上がるので、ローカルに入れたビルドもリリースと同じバージョンを名乗る。
 
 ## ライセンス
 

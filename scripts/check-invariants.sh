@@ -19,6 +19,27 @@ else
   ng "VERSION must be a single 'MAJOR.MINOR.PATCH' line, got: $(cat VERSION)"
 fi
 
+# xcodeproj の MARKETING_VERSION は VERSION と一致させる（scripts/bump-version.sh が両方上げる）。
+# CI/release は xcodebuild の引数で上書きするので、ずれても気付けるのはローカルビルドだけ
+ver="$(tr -d '[:space:]' < VERSION)"
+marketing="$(sed -n 's/.*MARKETING_VERSION = \([^;]*\);.*/\1/p' "$PBX" | sort -u)"
+marketing="$(echo $marketing)"  # 値が複数あれば空白区切りの 1 行になる
+if [ "$marketing" = "$ver" ]; then
+  ok "MARKETING_VERSION matches VERSION ($ver) in all 4 build configurations"
+else
+  ng "MARKETING_VERSION in $PBX must be $ver in all 4 build configurations, found: $marketing (run scripts/bump-version.sh)"
+fi
+
+# ビルド番号は 4 configuration で揃っていること（揃っていないと bump 時にどれが本物か決まらない）
+builds="$(sed -n 's/.*CURRENT_PROJECT_VERSION = \([^;]*\);.*/\1/p' "$PBX" | sort -u)"
+builds="$(echo $builds)"
+if [ "$(sed -n 's/.*CURRENT_PROJECT_VERSION = [^;]*;.*/x/p' "$PBX" | wc -l)" -eq 4 ] &&
+   [ "$(echo "$builds" | wc -w)" -eq 1 ]; then
+  ok "CURRENT_PROJECT_VERSION is the same ($builds) in all 4 build configurations"
+else
+  ng "CURRENT_PROJECT_VERSION must appear in all 4 build configurations with one value, found: $builds"
+fi
+
 # 署名は ad-hoc 固定。Apple ID・証明書なしでどのマシンでもビルドできることが要件
 if grep -q 'DEVELOPMENT_TEAM' "$PBX"; then
   ng "DEVELOPMENT_TEAM found in $PBX (ad-hoc signing must stay team-less)"
