@@ -12,11 +12,28 @@ set -eu
 cd "$(dirname "$0")/.."
 
 PBX=usage-hud.xcodeproj/project.pbxproj
+CONFIGS=4  # app Debug/Release + widget Debug/Release
 
 usage() { echo "usage: $0 patch|minor|major|MAJOR.MINOR.PATCH" >&2; exit 2; }
+die() { printf '%s\n' "$1" >&2; exit 1; }
+
+# 4 configuration ぶんの設定値を「値の重複を潰した 1 行」で返す。
+# 個数が合わない（キーが増減した）ときはここで止める。数え損ねたまま sed すると
+# 一部の configuration だけ古いバージョンで残る
+pbx_setting() {
+  values="$(sed -n "s/.*$1 = \\([^;]*\\);.*/\\1/p" "$PBX")"
+  count="$(echo "$values" | grep -c . || true)"
+  [ "$count" -eq "$CONFIGS" ] ||
+    die "$1 must appear in all $CONFIGS build configurations of $PBX, found $count"
+  echo $(echo "$values" | sort -u)
+}
+
 [ $# -eq 1 ] || usage
 
 CUR="$(tr -d '[:space:]' < VERSION)"
+# 壊れた VERSION（マージ衝突の残骸など）を算術展開に渡すと読めないエラーになる
+echo "$CUR" | grep -qxE '[0-9]+\.[0-9]+\.[0-9]+' ||
+  die "VERSION must be a single 'MAJOR.MINOR.PATCH' line, got: $(cat VERSION)"
 MA="${CUR%%.*}"
 MI="${CUR#*.}"; MI="${MI%%.*}"
 PA="${CUR##*.}"
@@ -29,16 +46,18 @@ case "$1" in
   *) usage ;;
 esac
 
-echo "$NEW" | grep -qxE '[0-9]+\.[0-9]+\.[0-9]+' || { echo "not a semver: $NEW" >&2; exit 1; }
+echo "$NEW" | grep -qxE '[0-9]+\.[0-9]+\.[0-9]+' || die "not a semver: $NEW"
+
+# 書き換え対象が 4 つ揃っていることを、書き換える前に確かめる
+pbx_setting MARKETING_VERSION > /dev/null
 
 # CURRENT_PROJECT_VERSION（ビルド番号）は 4 configuration で揃っている前提。
 # ずれていると「どれが本物か」が決まらないので、直してから上げる
-BUILDS="$(sed -n 's/.*CURRENT_PROJECT_VERSION = \([0-9][0-9]*\);.*/\1/p' "$PBX" | sort -u)"
-[ "$(echo "$BUILDS" | wc -l)" -eq 1 ] || {
-  echo "CURRENT_PROJECT_VERSION differs across build configurations: $(echo "$BUILDS" | tr '\n' ' ')" >&2
-  exit 1
-}
-NEW_BUILD="$((BUILDS + 1))"
+BUILD="$(pbx_setting CURRENT_PROJECT_VERSION)"
+case "$BUILD" in
+  *[!0-9]*) die "CURRENT_PROJECT_VERSION must be one integer across build configurations, found: $BUILD" ;;
+esac
+NEW_BUILD="$((BUILD + 1))"
 
 echo "$NEW" > VERSION
 
@@ -47,4 +66,4 @@ sed -e "s/MARKETING_VERSION = [^;]*;/MARKETING_VERSION = ${NEW};/" \
     "$PBX" > "$PBX.tmp"
 mv "$PBX.tmp" "$PBX"
 
-echo "${CUR} -> ${NEW} (build ${BUILDS} -> ${NEW_BUILD})"
+echo "${CUR} -> ${NEW} (build ${BUILD} -> ${NEW_BUILD})"

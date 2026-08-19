@@ -22,22 +22,25 @@ fi
 # xcodeproj の MARKETING_VERSION は VERSION と一致させる（scripts/bump-version.sh が両方上げる）。
 # CI/release は xcodebuild の引数で上書きするので、ずれても気付けるのはローカルビルドだけ
 ver="$(tr -d '[:space:]' < VERSION)"
-marketing="$(sed -n 's/.*MARKETING_VERSION = \([^;]*\);.*/\1/p' "$PBX" | sort -u)"
-marketing="$(echo $marketing)"  # 値が複数あれば空白区切りの 1 行になる
-if [ "$marketing" = "$ver" ]; then
+
+# 設定値の個数（4 configuration ぶんあるか）と、重複を潰した値を取り出す。
+# 個数を見ないと、キーが消えた configuration があっても「残りが一致」で通ってしまう
+pbx_count() { sed -n "s/.*$1 = [^;]*;.*/x/p" "$PBX" | grep -c . || true; }
+pbx_values() { echo $(sed -n "s/.*$1 = \\([^;]*\\);.*/\\1/p" "$PBX" | sort -u); }
+
+marketing="$(pbx_values MARKETING_VERSION)"
+if [ "$(pbx_count MARKETING_VERSION)" -eq 4 ] && [ "$marketing" = "$ver" ]; then
   ok "MARKETING_VERSION matches VERSION ($ver) in all 4 build configurations"
 else
-  ng "MARKETING_VERSION in $PBX must be $ver in all 4 build configurations, found: $marketing (run scripts/bump-version.sh)"
+  ng "MARKETING_VERSION in $PBX must be $ver in all 4 build configurations, found $(pbx_count MARKETING_VERSION) entries: $marketing (run scripts/bump-version.sh)"
 fi
 
 # ビルド番号は 4 configuration で揃っていること（揃っていないと bump 時にどれが本物か決まらない）
-builds="$(sed -n 's/.*CURRENT_PROJECT_VERSION = \([^;]*\);.*/\1/p' "$PBX" | sort -u)"
-builds="$(echo $builds)"
-if [ "$(sed -n 's/.*CURRENT_PROJECT_VERSION = [^;]*;.*/x/p' "$PBX" | wc -l)" -eq 4 ] &&
-   [ "$(echo "$builds" | wc -w)" -eq 1 ]; then
+builds="$(pbx_values CURRENT_PROJECT_VERSION)"
+if [ "$(pbx_count CURRENT_PROJECT_VERSION)" -eq 4 ] && [ "$(echo "$builds" | wc -w)" -eq 1 ]; then
   ok "CURRENT_PROJECT_VERSION is the same ($builds) in all 4 build configurations"
 else
-  ng "CURRENT_PROJECT_VERSION must appear in all 4 build configurations with one value, found: $builds"
+  ng "CURRENT_PROJECT_VERSION must appear in all 4 build configurations with one value, found $(pbx_count CURRENT_PROJECT_VERSION) entries: $builds"
 fi
 
 # 署名は ad-hoc 固定。Apple ID・証明書なしでどのマシンでもビルドできることが要件
