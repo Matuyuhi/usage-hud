@@ -1,0 +1,13 @@
+# Action は SHA ピン留め運用なので、更新は Dependabot に拾わせる。
+# 依存は GitHub Actions だけ（Swift 側に外部パッケージは無い）。
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: "ci"

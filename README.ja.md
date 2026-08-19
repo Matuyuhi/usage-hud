@@ -2,6 +2,8 @@
 
 [English](README.md)
 
+[![CI](https://github.com/Matuyuhi/usage-hud/actions/workflows/ci.yml/badge.svg)](https://github.com/Matuyuhi/usage-hud/actions/workflows/ci.yml)
+
 Copilot / Claude Code / Codex の残り使用量と、CPU・メモリ使用率を一枚で見る macOS 常駐アプリ。
 メニューバーにアイコンを増やさず、`⌃⌥U` で好きなときに呼び出せます。
 
@@ -48,6 +50,17 @@ UI はシステムの言語設定に従い、英語と日本語を収録して�
 
 各サービスの使用量 API は公開仕様ではないため、提供側の変更で取得できなくなることがあります。
 取得に失敗したサービスは、直前の値とエラー内容を並べて表示します。
+
+## 開発
+
+```sh
+scripts/install.sh            # Release ビルドして /Applications に入れる
+scripts/check-invariants.sh   # CI が見る署名・sandbox・認証まわりの決めごとチェック
+```
+
+PR ではこの 2 つが回る（macOS での universal Release ビルドと、上の invariant チェック）。
+リリースは `VERSION` が信号なので、「Bump version」ワークフローを回して、開いた PR をマージすると
+リリース公開と Homebrew cask 更新まで進む。
 
 ## ライセンス
 
