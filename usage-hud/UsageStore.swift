@@ -86,13 +86,13 @@ final class UsageStore: ObservableObject {
             let services = (claude: await claude, codex: await codex, copilot: await copilot)
             let sample = sampleForSnapshot()
             system = sample
-            publish(snapshot: UsageSnapshot(
+            // 取得中に無効化されたサービスがあり得るので、公開前に今の選択で絞り直す
+            publish(snapshot: withCurrentSelection(UsageSnapshot(
                 claude: services.claude,
                 codex: services.codex,
                 copilot: services.copilot,
                 system: sample,
-                fetchedAt: Date(),
-                enabledItems: DisplayItem.encode(enabled)))
+                fetchedAt: Date())))
             isRefreshing = false
             if pendingRefresh {
                 pendingRefresh = false

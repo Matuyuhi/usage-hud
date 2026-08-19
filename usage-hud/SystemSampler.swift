@@ -7,8 +7,17 @@ final class SystemSampler {
     private var previousTotal: UInt64 = 0
     private var previousNetwork: (inBytes: UInt64, outBytes: UInt64, at: Date)?
     // ゆっくりしか動かない指標(バッテリー/ディスク)は 2 秒ごとに引き直さず、前回値を使い回す
-    private var slowCache: (battery: BatterySample?, disk: DiskSample?, at: Date)?
+    private var slowCache: SlowCache?
     private static let slowInterval: TimeInterval = 30
+
+    /// バッテリーの無い Mac では battery が常に nil になるため、値の有無ではなく
+    /// 「どの項目を実際に引いたか」でキャッシュのヒットを判定する
+    private struct SlowCache {
+        var battery: BatterySample?
+        var disk: DiskSample?
+        var sampled: Set<DisplayItem>
+        var at: Date
+    }
 
     /// 有効な項目だけを取る。無効な指標のカーネル統計呼び出しは一切行わない
     func sample(enabled: Set<DisplayItem>) -> SystemSample {
@@ -37,32 +46,30 @@ final class SystemSampler {
             previousNetwork = nil
         }
 
-        let wantsBattery = enabled.contains(.battery)
-        let wantsDisk = enabled.contains(.disk)
-        if wantsBattery || wantsDisk {
-            let slow = slowValues(battery: wantsBattery, disk: wantsDisk)
-            sample.battery = wantsBattery ? slow.battery : nil
-            sample.disk = wantsDisk ? slow.disk : nil
-        } else {
+        let wanted = enabled.intersection([.battery, .disk])
+        if wanted.isEmpty {
             slowCache = nil
+        } else {
+            let slow = slowValues(wanted)
+            sample.battery = slow.battery
+            sample.disk = slow.disk
         }
         return sample
     }
 
-    private func slowValues(battery wantsBattery: Bool, disk wantsDisk: Bool)
-        -> (battery: BatterySample?, disk: DiskSample?) {
-        // 直前の取得で「その項目は無効だったので取っていない」場合があるため、
-        // 欲しい値が欠けているキャッシュは期限内でも作り直す
+    private func slowValues(_ wanted: Set<DisplayItem>) -> (battery: BatterySample?, disk: DiskSample?) {
+        // 直前の取得で無効だった項目はキャッシュに入っていないので、その場合だけ引き直す
         if let cache = slowCache,
            Date().timeIntervalSince(cache.at) < Self.slowInterval,
-           !(wantsBattery && cache.battery == nil),
-           !(wantsDisk && cache.disk == nil) {
-            return (cache.battery, cache.disk)
+           wanted.isSubset(of: cache.sampled) {
+            // キャッシュには今より広い範囲が入っていることがあるので、要求された項目だけ返す
+            return (wanted.contains(.battery) ? cache.battery : nil,
+                    wanted.contains(.disk) ? cache.disk : nil)
         }
-        let fresh = (battery: wantsBattery ? batterySample() : nil,
-                     disk: wantsDisk ? diskSample() : nil)
-        slowCache = (fresh.battery, fresh.disk, Date())
-        return fresh
+        let battery = wanted.contains(.battery) ? batterySample() : nil
+        let disk = wanted.contains(.disk) ? diskSample() : nil
+        slowCache = SlowCache(battery: battery, disk: disk, sampled: wanted, at: Date())
+        return (battery, disk)
     }
 
     private func cpuPercent() -> Double {
@@ -167,7 +174,7 @@ final class SystemSampler {
             volumeName: values.volumeName)
     }
 
-    /// 全物理インターフェースの累計バイト数の差分から速度を出す
+    /// 物理インターフェースの累計バイト数の差分から速度を出す
     private func networkSample() -> NetworkSample? {
         guard let counters = networkCounters() else { return nil }
         let now = Date()
@@ -201,9 +208,11 @@ final class SystemSampler {
         var outBytes: UInt64 = 0
         for pointer in sequence(first: first, next: { $0.pointee.ifa_next }) {
             let interface = pointer.pointee
-            // 統計はリンク層のエントリにだけ入る。ループバックは通信量ではないので除く
+            // 統計はリンク層のエントリにだけ入る。物理インターフェース(Wi-Fi / Ethernet /
+            // USB アダプタ)は en* で、VPN(utun*)・ブリッジ(bridge*)・AirDrop(awdl*/llw*)は
+            // 実体の en* と同じ通信を重ねて数えてしまうため足さない
             guard interface.ifa_addr?.pointee.sa_family == UInt8(AF_LINK),
-                  !String(cString: interface.ifa_name).hasPrefix("lo"),
+                  String(cString: interface.ifa_name).hasPrefix("en"),
                   let data = interface.ifa_data?.assumingMemoryBound(to: if_data.self)
             else { continue }
             inBytes += UInt64(data.pointee.ifi_ibytes)

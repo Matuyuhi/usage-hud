@@ -32,17 +32,26 @@ struct UsageWidgetView: View {
             if let snapshot = entry.snapshot {
                 // 本体で表示対象から外した項目はウィジェットにも出さない
                 let enabled = snapshot.enabled
+                let services = DisplayItem.services.filter { enabled.contains($0) }
+                let metrics = snapshot.system.map { systemParts($0, enabled: enabled) } ?? []
                 // サービス名と残量の列幅は実際の文言から揃える(言語で語長が変わるため固定値で持たない)
                 Grid(alignment: .leading, horizontalSpacing: 6, verticalSpacing: 6) {
-                    ForEach(DisplayItem.services.filter { enabled.contains($0) }) { service in
+                    ForEach(services) { service in
                         serviceLine(name: shortName(service), usage: usage(for: service, in: snapshot))
                     }
                 }
                 Spacer(minLength: 0)
-                let systemLine = snapshot.system.map { systemText($0, enabled: enabled) } ?? ""
                 VStack(alignment: .leading, spacing: 2) {
-                    if family != .systemSmall, !systemLine.isEmpty {
-                        Text(systemLine)
+                    // 小サイズは横幅が足りないので普段は指標を省くが、
+                    // サービスを 1 つも表示しない設定では指標だけが中身なので縦に並べて出す
+                    if family == .systemSmall {
+                        if services.isEmpty {
+                            ForEach(metrics, id: \.self) { metric in
+                                Text(metric)
+                            }
+                        }
+                    } else if !metrics.isEmpty {
+                        Text(metrics.joined(separator: " · "))
                             .lineLimit(1)
                     }
                     Text("Updated \(snapshot.fetchedAt.formatted(date: .omitted, time: .shortened))")
@@ -102,8 +111,8 @@ struct UsageWidgetView: View {
         }
     }
 
-    /// 表示している指標だけを 1 行にまとめる。狭いのでラベルは短縮形にする
-    private func systemText(_ system: SystemSample, enabled: Set<DisplayItem>) -> String {
+    /// 表示している指標だけを並べる。狭いのでラベルは短縮形にする
+    private func systemParts(_ system: SystemSample, enabled: Set<DisplayItem>) -> [String] {
         var parts: [String] = []
         if enabled.contains(.cpu), let cpu = system.cpuPercent {
             parts.append("CPU \(percentText(cpu))")
@@ -120,7 +129,7 @@ struct UsageWidgetView: View {
         if enabled.contains(.network), let network = system.network {
             parts.append("↓" + rateText(network.inBytesPerSecond))
         }
-        return parts.joined(separator: " · ")
+        return parts
     }
 }
 
