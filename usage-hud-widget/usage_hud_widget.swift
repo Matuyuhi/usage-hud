@@ -30,19 +30,22 @@ struct UsageWidgetView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             if let snapshot = entry.snapshot {
+                // 本体で表示対象から外した項目はウィジェットにも出さない
+                let enabled = snapshot.enabled
                 // サービス名と残量の列幅は実際の文言から揃える(言語で語長が変わるため固定値で持たない)
                 Grid(alignment: .leading, horizontalSpacing: 6, verticalSpacing: 6) {
-                    serviceLine(name: "Claude", usage: snapshot.claude)
-                    serviceLine(name: "Codex", usage: snapshot.codex)
-                    serviceLine(name: "Copilot", usage: snapshot.copilot)
+                    ForEach(DisplayItem.services.filter { enabled.contains($0) }) { service in
+                        serviceLine(name: shortName(service), usage: usage(for: service, in: snapshot))
+                    }
                 }
                 Spacer(minLength: 0)
-                HStack {
-                    Text("Updated \(snapshot.fetchedAt.formatted(date: .omitted, time: .shortened))")
-                    Spacer()
-                    if family != .systemSmall, let system = snapshot.system {
-                        Text(systemText(system))
+                let systemLine = snapshot.system.map { systemText($0, enabled: enabled) } ?? ""
+                VStack(alignment: .leading, spacing: 2) {
+                    if family != .systemSmall, !systemLine.isEmpty {
+                        Text(systemLine)
+                            .lineLimit(1)
                     }
+                    Text("Updated \(snapshot.fetchedAt.formatted(date: .omitted, time: .shortened))")
                 }
                 .font(.system(size: 10))
                 .foregroundStyle(.secondary)
@@ -53,6 +56,24 @@ struct UsageWidgetView: View {
             }
         }
         .containerBackground(.fill.tertiary, for: .widget)
+    }
+
+    private func shortName(_ service: DisplayItem) -> String {
+        switch service {
+        case .claude: "Claude"
+        case .codex: "Codex"
+        case .copilot: "Copilot"
+        default: service.rawValue
+        }
+    }
+
+    private func usage(for service: DisplayItem, in snapshot: UsageSnapshot) -> ServiceUsage? {
+        switch service {
+        case .claude: snapshot.claude
+        case .codex: snapshot.codex
+        case .copilot: snapshot.copilot
+        default: nil
+        }
     }
 
     // GridRow は Grid の直接の子である必要があるため、行はメソッドで組む(View に包まない)
@@ -81,9 +102,25 @@ struct UsageWidgetView: View {
         }
     }
 
-    private func systemText(_ system: SystemSample) -> String {
-        "CPU \(percentText(system.cpuPercent)) · MEM "
-            + String(format: "%.0f/%.0fGB", system.memUsedGB, system.memTotalGB)
+    /// 表示している指標だけを 1 行にまとめる。狭いのでラベルは短縮形にする
+    private func systemText(_ system: SystemSample, enabled: Set<DisplayItem>) -> String {
+        var parts: [String] = []
+        if enabled.contains(.cpu), let cpu = system.cpuPercent {
+            parts.append("CPU \(percentText(cpu))")
+        }
+        if enabled.contains(.memory), system.memTotalBytes != nil {
+            parts.append(String(format: "MEM %.0f/%.0fGB", system.memUsedGB, system.memTotalGB))
+        }
+        if enabled.contains(.battery), let battery = system.battery {
+            parts.append("BAT \(percentText(battery.percent))" + (battery.isPluggedIn ? "⚡" : ""))
+        }
+        if enabled.contains(.disk), let disk = system.disk {
+            parts.append("SSD \(percentText(disk.fraction * 100))")
+        }
+        if enabled.contains(.network), let network = system.network {
+            parts.append("↓" + rateText(network.inBytesPerSecond))
+        }
+        return parts.joined(separator: " · ")
     }
 }
 

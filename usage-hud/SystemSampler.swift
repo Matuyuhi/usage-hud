@@ -1,20 +1,68 @@
 import Foundation
 import Darwin
+import IOKit.ps
 
 final class SystemSampler {
     private var previousBusy: UInt64 = 0
     private var previousTotal: UInt64 = 0
+    private var previousNetwork: (inBytes: UInt64, outBytes: UInt64, at: Date)?
+    // ゆっくりしか動かない指標(バッテリー/ディスク)は 2 秒ごとに引き直さず、前回値を使い回す
+    private var slowCache: (battery: BatterySample?, disk: DiskSample?, at: Date)?
+    private static let slowInterval: TimeInterval = 30
 
-    func sample() -> SystemSample {
-        let memory = memoryBreakdown()
-        return SystemSample(
-            cpuPercent: cpuPercent(),
-            memUsedBytes: memory.active + memory.wired + memory.compressed,
-            memTotalBytes: ProcessInfo.processInfo.physicalMemory,
-            sampledAt: Date(),
-            memActiveBytes: memory.active,
-            memWiredBytes: memory.wired,
-            memCompressedBytes: memory.compressed)
+    /// 有効な項目だけを取る。無効な指標のカーネル統計呼び出しは一切行わない
+    func sample(enabled: Set<DisplayItem>) -> SystemSample {
+        var sample = SystemSample(cpuPercent: nil, memUsedBytes: nil, memTotalBytes: nil, sampledAt: Date())
+
+        if enabled.contains(.cpu) {
+            sample.cpuPercent = cpuPercent()
+        } else {
+            // 無効の間は差分の基準が古くなるので捨てる(再度有効にしたときは次回から実測値になる)
+            previousBusy = 0
+            previousTotal = 0
+        }
+
+        if enabled.contains(.memory) {
+            let memory = memoryBreakdown()
+            sample.memUsedBytes = memory.active + memory.wired + memory.compressed
+            sample.memTotalBytes = ProcessInfo.processInfo.physicalMemory
+            sample.memActiveBytes = memory.active
+            sample.memWiredBytes = memory.wired
+            sample.memCompressedBytes = memory.compressed
+        }
+
+        if enabled.contains(.network) {
+            sample.network = networkSample()
+        } else {
+            previousNetwork = nil
+        }
+
+        let wantsBattery = enabled.contains(.battery)
+        let wantsDisk = enabled.contains(.disk)
+        if wantsBattery || wantsDisk {
+            let slow = slowValues(battery: wantsBattery, disk: wantsDisk)
+            sample.battery = wantsBattery ? slow.battery : nil
+            sample.disk = wantsDisk ? slow.disk : nil
+        } else {
+            slowCache = nil
+        }
+        return sample
+    }
+
+    private func slowValues(battery wantsBattery: Bool, disk wantsDisk: Bool)
+        -> (battery: BatterySample?, disk: DiskSample?) {
+        // 直前の取得で「その項目は無効だったので取っていない」場合があるため、
+        // 欲しい値が欠けているキャッシュは期限内でも作り直す
+        if let cache = slowCache,
+           Date().timeIntervalSince(cache.at) < Self.slowInterval,
+           !(wantsBattery && cache.battery == nil),
+           !(wantsDisk && cache.disk == nil) {
+            return (cache.battery, cache.disk)
+        }
+        let fresh = (battery: wantsBattery ? batterySample() : nil,
+                     disk: wantsDisk ? diskSample() : nil)
+        slowCache = (fresh.battery, fresh.disk, Date())
+        return fresh
     }
 
     private func cpuPercent() -> Double {
@@ -69,5 +117,98 @@ final class SystemSampler {
         return (UInt64(stats.active_count) * pageSize,
                 UInt64(stats.wire_count) * pageSize,
                 UInt64(stats.compressor_page_count) * pageSize)
+    }
+
+    /// 内蔵バッテリーの状態。デスクトップ機など内蔵バッテリーが無い場合は nil
+    private func batterySample() -> BatterySample? {
+        guard let blob = IOPSCopyPowerSourcesInfo()?.takeRetainedValue(),
+              let sources = IOPSCopyPowerSourcesList(blob)?.takeRetainedValue() as? [CFTypeRef]
+        else { return nil }
+
+        for source in sources {
+            guard let description = IOPSGetPowerSourceDescription(blob, source)?
+                    .takeUnretainedValue() as? [String: Any],
+                  description[kIOPSTypeKey] as? String == kIOPSInternalBatteryType,
+                  let current = description[kIOPSCurrentCapacityKey] as? Int,
+                  let capacity = description[kIOPSMaxCapacityKey] as? Int, capacity > 0
+            else { continue }
+
+            // 算出中は -1 が返る。そのまま出すと「-1 分」になるので落とす
+            func minutes(_ key: String) -> Int? {
+                guard let value = description[key] as? Int, value >= 0 else { return nil }
+                return value
+            }
+            let isCharging = description[kIOPSIsChargingKey] as? Bool ?? false
+            return BatterySample(
+                percent: Double(current) / Double(capacity) * 100,
+                isCharging: isCharging,
+                isPluggedIn: description[kIOPSPowerSourceStateKey] as? String == kIOPSACPowerValue,
+                minutesToEmpty: isCharging ? nil : minutes(kIOPSTimeToEmptyKey),
+                minutesToFull: isCharging ? minutes(kIOPSTimeToFullChargeKey) : nil,
+                health: description[kIOPSBatteryHealthKey] as? String)
+        }
+        return nil
+    }
+
+    /// 起動ボリュームの使用量。空き容量は Finder と同じ「重要な用途に使える容量」を採る
+    private func diskSample() -> DiskSample? {
+        let url = URL(fileURLWithPath: "/")
+        guard let values = try? url.resourceValues(forKeys: [
+            .volumeTotalCapacityKey, .volumeAvailableCapacityForImportantUsageKey, .volumeNameKey,
+        ]),
+            let total = values.volumeTotalCapacity, total > 0
+        else { return nil }
+        let free = UInt64(clamping: values.volumeAvailableCapacityForImportantUsage ?? 0)
+        let totalBytes = UInt64(total)
+        return DiskSample(
+            usedBytes: totalBytes > free ? totalBytes - free : 0,
+            totalBytes: totalBytes,
+            freeBytes: free,
+            volumeName: values.volumeName)
+    }
+
+    /// 全物理インターフェースの累計バイト数の差分から速度を出す
+    private func networkSample() -> NetworkSample? {
+        guard let counters = networkCounters() else { return nil }
+        let now = Date()
+        defer { previousNetwork = (counters.inBytes, counters.outBytes, now) }
+        guard let previous = previousNetwork else {
+            return NetworkSample(inBytesPerSecond: 0, outBytesPerSecond: 0,
+                                 totalInBytes: counters.inBytes, totalOutBytes: counters.outBytes)
+        }
+        let elapsed = now.timeIntervalSince(previous.at)
+        guard elapsed > 0 else {
+            return NetworkSample(inBytesPerSecond: 0, outBytesPerSecond: 0,
+                                 totalInBytes: counters.inBytes, totalOutBytes: counters.outBytes)
+        }
+        // インターフェースの上げ下げでカウンタが巻き戻ることがあるので、減っていたら 0 とみなす
+        func rate(_ current: UInt64, _ old: UInt64) -> Double {
+            current >= old ? Double(current - old) / elapsed : 0
+        }
+        return NetworkSample(
+            inBytesPerSecond: rate(counters.inBytes, previous.inBytes),
+            outBytesPerSecond: rate(counters.outBytes, previous.outBytes),
+            totalInBytes: counters.inBytes,
+            totalOutBytes: counters.outBytes)
+    }
+
+    private func networkCounters() -> (inBytes: UInt64, outBytes: UInt64)? {
+        var head: UnsafeMutablePointer<ifaddrs>?
+        guard getifaddrs(&head) == 0, let first = head else { return nil }
+        defer { freeifaddrs(head) }
+
+        var inBytes: UInt64 = 0
+        var outBytes: UInt64 = 0
+        for pointer in sequence(first: first, next: { $0.pointee.ifa_next }) {
+            let interface = pointer.pointee
+            // 統計はリンク層のエントリにだけ入る。ループバックは通信量ではないので除く
+            guard interface.ifa_addr?.pointee.sa_family == UInt8(AF_LINK),
+                  !String(cString: interface.ifa_name).hasPrefix("lo"),
+                  let data = interface.ifa_data?.assumingMemoryBound(to: if_data.self)
+            else { continue }
+            inBytes += UInt64(data.pointee.ifi_ibytes)
+            outBytes += UInt64(data.pointee.ifi_obytes)
+        }
+        return (inBytes, outBytes)
     }
 }

@@ -7,6 +7,11 @@ nonisolated struct UsageSnapshot: Codable {
     var copilot: ServiceUsage?
     var system: SystemSample?
     var fetchedAt: Date
+    /// 本体が表示すると決めた項目。ウィジェットは UserDefaults を共有できないので、
+    /// 選択内容もこのファイル経由で渡す
+    var enabledItems: [String]? = nil
+
+    var enabled: Set<DisplayItem> { DisplayItem.decode(enabledItems) }
 }
 
 nonisolated struct ServiceUsage: Codable {
@@ -37,17 +42,59 @@ nonisolated struct Gauge: Codable, Identifiable {
     var remainingPercent: Double { max(0, 100 - usedPercent) }
 }
 
+// 各指標は「無効なので取っていない」を nil で表す。既存の JSON もそのまま読める
 nonisolated struct SystemSample: Codable {
-    var cpuPercent: Double
-    var memUsedBytes: UInt64
-    var memTotalBytes: UInt64
+    var cpuPercent: Double?
+    var memUsedBytes: UInt64?
+    var memTotalBytes: UInt64?
     var sampledAt: Date
     var memActiveBytes: UInt64? = nil
     var memWiredBytes: UInt64? = nil
     var memCompressedBytes: UInt64? = nil
+    var battery: BatterySample? = nil
+    var disk: DiskSample? = nil
+    var network: NetworkSample? = nil
 
-    var memUsedGB: Double { Double(memUsedBytes) / 1_073_741_824 }
-    var memTotalGB: Double { Double(memTotalBytes) / 1_073_741_824 }
+    var memUsedGB: Double { Double(memUsedBytes ?? 0) / 1_073_741_824 }
+    var memTotalGB: Double { Double(memTotalBytes ?? 0) / 1_073_741_824 }
+
+    var memFraction: Double? {
+        guard let used = memUsedBytes, let total = memTotalBytes, total > 0 else { return nil }
+        return Double(used) / Double(total)
+    }
+}
+
+nonisolated struct BatterySample: Codable {
+    var percent: Double
+    var isCharging: Bool
+    /// 電源に繋がっているか。満充電で充電が止まっている間も true
+    var isPluggedIn: Bool
+    /// 残り時間 / 満充電までの時間。macOS が算出中の間は nil
+    var minutesToEmpty: Int? = nil
+    var minutesToFull: Int? = nil
+    /// "Good" / "Fair" / "Poor" など。取れないモデルもあるので optional
+    var health: String? = nil
+
+    var fraction: Double { min(max(percent / 100, 0), 1) }
+}
+
+nonisolated struct DiskSample: Codable {
+    var usedBytes: UInt64
+    var totalBytes: UInt64
+    var freeBytes: UInt64
+    var volumeName: String? = nil
+
+    var fraction: Double {
+        guard totalBytes > 0 else { return 0 }
+        return Double(usedBytes) / Double(totalBytes)
+    }
+}
+
+nonisolated struct NetworkSample: Codable {
+    var inBytesPerSecond: Double
+    var outBytesPerSecond: Double
+    var totalInBytes: UInt64
+    var totalOutBytes: UInt64
 }
 
 nonisolated enum SharedStore {
