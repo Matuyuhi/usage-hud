@@ -1,0 +1,75 @@
+name: CI
+
+# PR と main への push で回す品質ゲート。テストが無いプロジェクトなので、
+# 「リリースと同じビルドが通る」ことと「壊すと厄介な設計判断が残っている」ことを見る。
+#
+# サードパーティ Action は供給網最小化のため公式 actions/checkout のみ（bump/release と同じ方針）。
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# 同じ PR に push が続いたら古い実行は捨てる（main は履歴を残すのでキャンセルしない）
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  invariants:
+    name: Invariants
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - name: Check the design invariants from CLAUDE.md
+        run: scripts/check-invariants.sh
+
+  build:
+    name: Build (universal, Release)
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Show toolchain
+        run: xcodebuild -version
+
+      # release.yml と同じ条件で組む。ここが緑なら、そのままリリースできる
+      - name: Build universal app
+        run: |
+          xcodebuild -project usage-hud.xcodeproj -scheme usage-hud \
+            -configuration Release -derivedDataPath build \
+            -destination 'generic/platform=macOS' \
+            ARCHS="arm64 x86_64" ONLY_ACTIVE_ARCH=NO \
+            MARKETING_VERSION="$(tr -d '[:space:]' < VERSION)" \
+            build
+
+      # ウィジェットが同梱され、両方 ad-hoc 署名で、universal になっていること。
+      # pluginkit への登録はインストールしないと確認できないので、ここでは同梱までを見る
+      - name: Verify the built bundle
+        run: |
+          set -eu
+          APP=build/Build/Products/Release/usage-hud.app
+          APPEX="$APP/Contents/PlugIns/usage-hud-widgetExtension.appex"
+
+          test -d "$APP"   || { echo "missing $APP"; exit 1; }
+          test -d "$APPEX" || { echo "widget extension is not embedded in the app"; exit 1; }
+
+          for binary in "$APP/Contents/MacOS/usage-hud" "$APPEX/Contents/MacOS/usage-hud-widgetExtension"; do
+            lipo -archs "$binary"
+            for arch in arm64 x86_64; do
+              lipo -archs "$binary" | tr ' ' '\n' | grep -qx "$arch" ||
+                { echo "$binary is missing the $arch slice"; exit 1; }
+            done
+          done
+
+          for bundle in "$APP" "$APPEX"; do
+            codesign -dv "$bundle" 2>&1 | tee /tmp/codesign.txt
+            grep -q '^Signature=adhoc$' /tmp/codesign.txt ||
+              { echo "$bundle is not ad-hoc signed"; exit 1; }
+          done
+
+          echo "app + widget: embedded, universal, ad-hoc signed"
