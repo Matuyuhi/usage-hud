@@ -31,22 +31,20 @@ jobs:
           BUMP: ${{ inputs.bump }}
         run: |
           CUR="$(tr -d '[:space:]' < VERSION)"
-          IFS='.' read -r MA MI PA <<< "$CUR"
-          case "$BUMP" in
-            major) MA=$((MA + 1)); MI=0; PA=0 ;;
-            minor) MI=$((MI + 1)); PA=0 ;;
-            patch) PA=$((PA + 1)) ;;
-          esac
-          NEW="${MA}.${MI}.${PA}"
-          echo "bump ${BUMP}: ${CUR} -> ${NEW}"
 
-          echo "$NEW" > VERSION
+          # VERSION と xcodeproj（MARKETING_VERSION / CURRENT_PROJECT_VERSION）を
+          # まとめて上げる。ローカルからも同じ手順で上げられるよう、計算はスクリプト側に置く
+          scripts/bump-version.sh "$BUMP"
+          NEW="$(tr -d '[:space:]' < VERSION)"
+
+          # 上げた結果が壊れていないこと（VERSION と pbxproj の一致など）を PR を開く前に確認する
+          scripts/check-invariants.sh
 
           BR="bump/v${NEW}"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git switch -c "$BR"
-          git add VERSION
+          git add VERSION usage-hud.xcodeproj/project.pbxproj
           git commit -m "release: bump version to ${NEW} (${BUMP})"
           git push -u origin "$BR"
 

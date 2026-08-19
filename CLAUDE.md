@@ -17,7 +17,15 @@ xcodebuild -project usage-hud.xcodeproj -scheme usage-hud -configuration Debug -
 
 # 署名・sandbox・認証まわりの決めごとチェック（CI と同じもの。macOS 不要）
 scripts/check-invariants.sh
+
+# バージョンを上げる（VERSION と xcodeproj を両方。通常は Bump version ワークフロー経由）
+scripts/bump-version.sh patch|minor|major
 ```
+
+バージョンの正は `VERSION`。xcodeproj の `MARKETING_VERSION` はそれと一致させ、`CURRENT_PROJECT_VERSION`
+（ビルド番号）は bump のたびに +1 する。CI / release は `xcodebuild` の引数で `MARKETING_VERSION` を
+上書きするので、ずれると困るのは `scripts/install.sh` で入れたローカルビルドだけ。
+だから手で pbxproj を編集せず `scripts/bump-version.sh` を通し、一致は `check-invariants.sh` が見張る。
 
 テストは無い。CI（`.github/workflows/ci.yml`）は PR で universal Release ビルドと上のチェックを回すだけなので、
 振る舞いの検証は実行して確認する:

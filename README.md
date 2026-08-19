@@ -69,11 +69,14 @@ A service that fails to fetch keeps showing its last value next to the error.
 ```sh
 scripts/install.sh            # build (Release) and install into /Applications
 scripts/check-invariants.sh   # the signing / sandbox / credential rules CI enforces
+scripts/bump-version.sh patch # raise VERSION and the xcodeproj version together
 ```
 
 Every pull request runs both: the universal Release build on macOS, and the invariant check.
 Releases are driven by `VERSION` — run the "Bump version" workflow, and merging the PR it opens
-publishes the release and updates the Homebrew cask.
+publishes the release and updates the Homebrew cask. The bump moves the xcodeproj's
+`MARKETING_VERSION` / `CURRENT_PROJECT_VERSION` along with it, so a locally installed build
+reports the same version as the release.
 
 ## License
 
