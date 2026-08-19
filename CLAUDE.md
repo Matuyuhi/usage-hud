@@ -34,7 +34,15 @@ scripts/check-invariants.sh
 - `usage-hud-widget/` — ウィジェット。sandbox ON（**extension は sandbox 必須**。OFF にすると pluginkit に登録されず、エラーログも出ない）。共有 JSON を読んで表示するだけ
 - `shared/` — 両ターゲットに属する。`UsageSnapshot`（データモデル）と `SharedStore`（JSON の読み書き）
 
-データの流れ: `Fetchers.swift`（3 サービス並列取得）→ `UsageStore`（@MainActor、タイマー管理: パネル表示中 60s / 非表示 5min / CPU・メモリ 2s）→ `SharedStore.save()` → ウィジェットの `TimelineProvider` が読む。
+データの流れ: `Fetchers.swift`（3 サービス並列取得）→ `UsageStore`（@MainActor、タイマー管理: パネル表示中 120s / 非表示 1800s / システム指標 2s）→ `SharedStore.save()` → ウィジェットの `TimelineProvider` が読む。
+
+### 表示項目の選択（`DisplayItem`）
+
+表示項目は `shared/DisplayItem.swift` の enum で、選択は `DisplayPreferences`（本体の UserDefaults）に持つ。無効な項目は**表示しないだけでなく取得もしない**のが要件:
+
+- サービス: `UsageStore.fetchService` が無効なら fetch を呼ばない（CLI 起動も HTTP も発生しない）。サービスが 0 個なら定期取得タイマー自体を張らない
+- システム指標: `SystemSampler.sample(enabled:)` が有効な指標のカーネル統計だけを引く。0 個なら 2 秒タイマーを張らない。バッテリー/ディスクは動きが遅いのでサンプラ内で 30 秒キャッシュする
+- ウィジェットとは App Group を共有できないため、選択内容も `UsageSnapshot.enabledItems` に入れて共有 JSON 経由で渡す
 
 ### データ源はすべて非公式 API（壊れたら都度直す前提）
 

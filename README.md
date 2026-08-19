@@ -4,7 +4,7 @@
 
 [![CI](https://github.com/Matuyuhi/usage-hud/actions/workflows/ci.yml/badge.svg)](https://github.com/Matuyuhi/usage-hud/actions/workflows/ci.yml)
 
-A macOS background app that shows the remaining Copilot / Claude Code / Codex usage together with CPU and memory load, all on one panel.
+A macOS background app that shows the remaining Copilot / Claude Code / Codex usage together with CPU, memory, battery, disk and network load, all on one panel.
 It adds no menu bar icon — press `⌃⌥U` whenever you want to see it.
 
 <img src="docs/panel.png" alt="usage-hud panel" width="346">
@@ -26,8 +26,21 @@ cd usage-hud && scripts/install.sh
 
 - `⌃⌥U` toggles the panel (clicking outside it closes it too)
 - Click a service name to expand its details (raw credit counts, reset time, and so on)
+- Pick what to show from "Display items" in the gear menu — anything you turn off is not fetched or sampled at all, so unused services cost nothing
 - Turn on "Launch at login" from the gear menu
 - Add the Notification Center widget from "Edit Widgets → Usage HUD"
+
+## Display items
+
+| Item | Shown by default | Source |
+|---|---|---|
+| Claude Code / Codex / Copilot | Yes | Each tool's own credentials (see below) |
+| CPU / Memory | Yes | Kernel statistics |
+| Battery | Yes | IOKit power sources (skipped on Macs with no built-in battery) |
+| Disk | No | Startup volume capacity |
+| Network | No | Throughput across the physical interfaces |
+
+Turning an item off stops its fetching and sampling, not just its row.
 
 ## Requirements
 

@@ -9,17 +9,24 @@ struct PanelView: View {
     /// 行間は Grid 全体で共通なので、セクションの見出し側に上余白を足して区切りを作る
     private let sectionGap: CGFloat = 8
 
+    private var services: [DisplayItem] { DisplayItem.services.filter { store.isEnabled($0) } }
+    private var systemMetrics: [DisplayItem] { DisplayItem.systemMetrics.filter { store.isEnabled($0) } }
+
     var body: some View {
         // ゲージ行を 1 つの Grid に集めて、ラベルと数値の列幅を実際の文言から揃える
         // (言語によって語長が変わるため、列幅は固定値で持たない)
         Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 6) {
             header
-            serviceSection(key: "claude", name: "Claude Code", usage: store.snapshot?.claude)
-            serviceSection(key: "codex", name: "Codex", usage: store.snapshot?.codex)
-            serviceSection(key: "copilot", name: "Copilot", usage: store.snapshot?.copilot)
-            Divider()
-                .padding(.top, sectionGap)
-            systemSection
+            ForEach(services) { service in
+                serviceSection(service)
+            }
+            if !systemMetrics.isEmpty {
+                if !services.isEmpty {
+                    Divider()
+                        .padding(.top, sectionGap)
+                }
+                systemSection
+            }
             footer
                 .padding(.top, sectionGap)
         }
@@ -38,17 +45,32 @@ struct PanelView: View {
         } else {
             expanded.insert(key)
         }
+        resizeAfterLayout()
+    }
+
+    /// 行数が変わる操作の後に、パネルを実際の内容の高さへ合わせ直す
+    private func resizeAfterLayout() {
         DispatchQueue.main.async { requestResize() }
     }
 
+    private func serviceUsage(for service: DisplayItem) -> ServiceUsage? {
+        switch service {
+        case .claude: store.snapshot?.claude
+        case .codex: store.snapshot?.codex
+        case .copilot: store.snapshot?.copilot
+        default: nil
+        }
+    }
+
     @ViewBuilder
-    private func serviceSection(key: String, name: String, usage: ServiceUsage?) -> some View {
+    private func serviceSection(_ service: DisplayItem) -> some View {
+        let usage = serviceUsage(for: service)
         SectionHeader(
-            name: name,
+            name: service.title,
             caption: usage?.detail,
-            isExpanded: expanded.contains(key),
+            isExpanded: expanded.contains(service.rawValue),
             hasDetails: !(usage?.details ?? []).isEmpty
-        ) { toggle(key) }
+        ) { toggle(service.rawValue) }
             .padding(.top, sectionGap)
         if let usage {
             if let error = usage.error {
@@ -67,7 +89,7 @@ struct PanelView: View {
                     trailing: String(format: String(localized: "%@ left"), percentText(gauge.remainingPercent)),
                     subtitle: gauge.resetsAt.map { "→ " + formatDetailDate($0) })
             }
-            if expanded.contains(key), !usage.gauges.isEmpty, let details = usage.details {
+            if expanded.contains(service.rawValue), !usage.gauges.isEmpty, let details = usage.details {
                 DetailList(items: details)
             }
         } else {
@@ -79,39 +101,108 @@ struct PanelView: View {
 
     @ViewBuilder
     private var systemSection: some View {
+        let system = store.system
+        let details = system.map { systemDetails($0) } ?? []
         SectionHeader(
             name: String(localized: "System"),
             caption: nil,
             isExpanded: expanded.contains("system"),
-            hasDetails: true
+            hasDetails: !details.isEmpty
         ) { toggle("system") }
             .padding(.top, sectionGap)
-        if let system = store.system {
-            gaugeRow(
-                label: "CPU",
-                fraction: system.cpuPercent / 100,
-                trailing: percentText(system.cpuPercent),
-                subtitle: nil)
-            gaugeRow(
-                label: String(localized: "Memory"),
-                fraction: Double(system.memUsedBytes) / Double(max(system.memTotalBytes, 1)),
-                trailing: String(format: "%.1f / %.0f GB", system.memUsedGB, system.memTotalGB),
-                subtitle: nil)
-            if expanded.contains("system") {
-                DetailList(items: memoryDetails(system))
+        if let system {
+            let rows = systemMetrics.compactMap { metricRow(for: $0, system: system) }
+            ForEach(rows) { row in
+                gaugeRow(
+                    label: row.label,
+                    fraction: row.fraction,
+                    severity: row.severity,
+                    trailing: row.trailing,
+                    subtitle: row.subtitle)
+            }
+            // バッテリーを表示する設定でも、内蔵バッテリーの無い Mac では行が作れない
+            if systemMetrics.contains(.battery), system.battery == nil {
+                Text("No built-in battery")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            if expanded.contains("system"), !details.isEmpty {
+                DetailList(items: details)
             }
         }
     }
 
+    /// システム指標 1 行分。バーを持たない指標(ネットワーク)は fraction を nil にする
+    private struct MetricRow: Identifiable {
+        var id: String { label }
+        let label: String
+        let fraction: Double?
+        var severity: Double? = nil
+        let trailing: String
+        var subtitle: String? = nil
+    }
+
+    private func metricRow(for metric: DisplayItem, system: SystemSample) -> MetricRow? {
+        switch metric {
+        case .cpu:
+            guard let cpu = system.cpuPercent else { return nil }
+            return MetricRow(label: metric.title, fraction: cpu / 100, trailing: percentText(cpu))
+        case .memory:
+            guard let fraction = system.memFraction else { return nil }
+            return MetricRow(
+                label: metric.title,
+                fraction: fraction,
+                trailing: String(format: "%.1f / %.0f GB", system.memUsedGB, system.memTotalGB))
+        case .battery:
+            guard let battery = system.battery else { return nil }
+            return MetricRow(
+                label: metric.title,
+                fraction: battery.fraction,
+                // 残量は多いほど良いので、配色は「不足量」で判定する。給電中は警告色を出さない
+                severity: battery.isPluggedIn ? 0 : 1 - battery.fraction,
+                trailing: percentText(battery.percent),
+                subtitle: batterySubtitle(battery))
+        case .disk:
+            guard let disk = system.disk else { return nil }
+            return MetricRow(
+                label: metric.title,
+                fraction: disk.fraction,
+                trailing: percentText(disk.fraction * 100),
+                subtitle: String(format: String(localized: "%@ free"), byteText(disk.freeBytes)))
+        case .network:
+            guard let network = system.network else { return nil }
+            return MetricRow(
+                label: metric.title,
+                fraction: nil,
+                trailing: "↓ " + rateText(network.inBytesPerSecond),
+                subtitle: "↑ " + rateText(network.outBytesPerSecond))
+        default:
+            return nil
+        }
+    }
+
+    /// 給電中は稲妻を出す。残り時間は macOS が算出中の間は出さない
+    private func batterySubtitle(_ battery: BatterySample) -> String? {
+        if battery.isCharging {
+            return battery.minutesToFull.map { "⚡ " + durationText($0) } ?? "⚡"
+        }
+        if battery.isPluggedIn { return "⚡" }
+        return battery.minutesToEmpty.map { durationText($0) }
+    }
+
     // GridRow は Grid の直接の子である必要があるため、行はメソッドで組む(View に包まない)
     private func gaugeRow(
-        label: String, fraction: Double, trailing: String, subtitle: String?
+        label: String, fraction: Double?, severity: Double? = nil, trailing: String, subtitle: String?
     ) -> some View {
         GridRow {
             Text(label)
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            UsageBar(fraction: fraction)
+            if let fraction {
+                UsageBar(fraction: fraction, severity: severity)
+            } else {
+                Color.clear.frame(height: DesignTokens.barHeight)
+            }
             VStack(alignment: .trailing, spacing: 0) {
                 Text(trailing)
                     .font(.caption.monospacedDigit())
@@ -126,15 +217,43 @@ struct PanelView: View {
         .accessibilityElement(children: .combine)
     }
 
-    private func memoryDetails(_ system: SystemSample) -> [DetailItem] {
+    /// 展開時の内訳。表示している指標の分だけ組み立てる
+    private func systemDetails(_ system: SystemSample) -> [DetailItem] {
         func gb(_ bytes: UInt64?) -> String {
             String(format: "%.1f GB", Double(bytes ?? 0) / 1_073_741_824)
         }
-        return [
-            DetailItem(label: String(localized: "Active"), value: gb(system.memActiveBytes)),
-            DetailItem(label: String(localized: "Wired"), value: gb(system.memWiredBytes)),
-            DetailItem(label: String(localized: "Compressed"), value: gb(system.memCompressedBytes)),
-        ]
+        var items: [DetailItem] = []
+        if systemMetrics.contains(.memory), system.memUsedBytes != nil {
+            items += [
+                DetailItem(label: String(localized: "Active"), value: gb(system.memActiveBytes)),
+                DetailItem(label: String(localized: "Wired"), value: gb(system.memWiredBytes)),
+                DetailItem(label: String(localized: "Compressed"), value: gb(system.memCompressedBytes)),
+            ]
+        }
+        if systemMetrics.contains(.battery), let battery = system.battery {
+            let state = battery.isCharging
+                ? String(localized: "Charging")
+                : (battery.isPluggedIn ? String(localized: "Plugged in") : String(localized: "On battery"))
+            items.append(DetailItem(label: String(localized: "Power source"), value: state))
+            if let minutes = battery.minutesToFull {
+                items.append(DetailItem(label: String(localized: "Time to full"), value: durationText(minutes)))
+            } else if let minutes = battery.minutesToEmpty {
+                items.append(DetailItem(label: String(localized: "Time remaining"), value: durationText(minutes)))
+            }
+            if let health = battery.health {
+                items.append(DetailItem(label: String(localized: "Condition"), value: health))
+            }
+        }
+        if systemMetrics.contains(.disk), let disk = system.disk {
+            items.append(DetailItem(label: String(localized: "Disk free"), value: byteText(disk.freeBytes)))
+            items.append(DetailItem(label: String(localized: "Disk capacity"), value: byteText(disk.totalBytes)))
+        }
+        if systemMetrics.contains(.network), let network = system.network {
+            // 累計はインターフェースが上がってからの合計(通常は起動時から)
+            items.append(DetailItem(label: String(localized: "Received"), value: byteText(network.totalInBytes)))
+            items.append(DetailItem(label: String(localized: "Sent"), value: byteText(network.totalOutBytes)))
+        }
+        return items
     }
 
     private var header: some View {
@@ -154,6 +273,8 @@ struct PanelView: View {
             .disabled(store.isRefreshing)
             .accessibilityLabel("Refresh now")
             Menu {
+                DisplayItemPicker(store: store, onChange: resizeAfterLayout)
+                Divider()
                 LaunchAtLoginToggle()
                 LanguagePicker()
                 Divider()
@@ -180,6 +301,33 @@ struct PanelView: View {
         }
         .font(.caption2)
         .foregroundStyle(.secondary)
+    }
+}
+
+/// 表示項目の選択。外した項目は取得もしなくなるので、使わないサービスを外せば負荷も減る
+private struct DisplayItemPicker: View {
+    @ObservedObject var store: UsageStore
+    let onChange: () -> Void
+
+    var body: some View {
+        Menu("Display items") {
+            ForEach(DisplayItem.services) { item in
+                toggle(item)
+            }
+            Divider()
+            ForEach(DisplayItem.systemMetrics) { item in
+                toggle(item)
+            }
+        }
+    }
+
+    private func toggle(_ item: DisplayItem) -> some View {
+        Toggle(item.title, isOn: Binding(
+            get: { store.isEnabled(item) },
+            set: { isOn in
+                store.setEnabled(item, isOn)
+                onChange()
+            }))
     }
 }
 

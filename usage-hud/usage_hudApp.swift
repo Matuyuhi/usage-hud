@@ -16,14 +16,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var panel: NSPanel?
     private var hotKey: HotKey?
     private var clickOutsideMonitor: Any?
-    private var resizeCancellable: AnyCancellable?
+    private var resizeCancellables: Set<AnyCancellable> = []
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         store.start()
-        // ゲージ数の変化で必要サイズが変わるため、snapshot 更新のたびに合わせ直す
-        resizeCancellable = store.$snapshot.sink { [weak self] _ in
+        // 行数の変化で必要サイズが変わるため、snapshot とシステム指標の更新のたびに合わせ直す。
+        // system は初回サンプルで行が増えるので、snapshot が変わらない経路でも見る必要がある
+        store.$snapshot.sink { [weak self] _ in
             DispatchQueue.main.async { self?.fitPanelToContent() }
         }
+        .store(in: &resizeCancellables)
+        store.$system.sink { [weak self] _ in
+            DispatchQueue.main.async { self?.fitPanelToContent() }
+        }
+        .store(in: &resizeCancellables)
         hotKey = HotKey(keyCode: UInt32(kVK_ANSI_U), modifiers: [.control, .option]) { [weak self] in
             self?.togglePanel()
         }
@@ -40,7 +46,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func fitPanelToContent() {
         guard let panel, panel.isVisible, let content = panel.contentView else { return }
-        panel.setContentSize(content.fittingSize)
+        // 2 秒ごとのシステム指標の更新では行数は変わらない。
+        // 毎回 position し直すと、ユーザーがドラッグで動かしたパネルを右上へ引き戻してしまう
+        let fitting = content.fittingSize
+        guard fitting != content.frame.size else { return }
+        panel.setContentSize(fitting)
         position(panel)
     }
 
