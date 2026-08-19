@@ -14,9 +14,13 @@ scripts/install.sh
 
 # ビルドのみ（Debug）
 xcodebuild -project usage-hud.xcodeproj -scheme usage-hud -configuration Debug -destination 'platform=macOS' build
+
+# 署名・sandbox・認証まわりの決めごとチェック（CI と同じもの。macOS 不要）
+scripts/check-invariants.sh
 ```
 
-テストは無い。動作検証は実行して確認する:
+テストは無い。CI（`.github/workflows/ci.yml`）は PR で universal Release ビルドと上のチェックを回すだけなので、
+振る舞いの検証は実行して確認する:
 
 - `~/Library/Application Support/usage-hud/usage.json` に 3 サービスの gauges がエラーなしで入ること
 - `pluginkit -m | grep usage` でウィジェット登録
