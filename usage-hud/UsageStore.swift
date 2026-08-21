@@ -21,6 +21,8 @@ final class UsageStore: ObservableObject {
     private var quotaTimer: Timer?
     private var systemTimer: Timer?
     private var panelVisible = false
+    /// メニュー表示中の一時停止。再描画が開いた NSMenu を組み直してしまうため、開いている間は更新しない
+    private var updatesPaused = false
     private var cooldownUntil: [String: Date] = [:]
     /// 取得中に項目が有効化された場合の再取得予約
     private var pendingRefresh = false
@@ -44,6 +46,23 @@ final class UsageStore: ObservableObject {
     }
 
     func isEnabled(_ item: DisplayItem) -> Bool { enabled.contains(item) }
+
+    /// 設定メニューを開いている間は定期更新を止める。
+    /// 2 秒ごとのシステム指標でビューが作り直されると、開いているメニューが点滅して操作できない
+    func setUpdatesPaused(_ paused: Bool) {
+        guard updatesPaused != paused else { return }
+        updatesPaused = paused
+        guard !paused else {
+            // 止めるだけ。ここでサンプリングし直すと、開いた直後のメニューを潰してしまう
+            systemTimer?.invalidate()
+            systemTimer = nil
+            quotaTimer?.invalidate()
+            quotaTimer = nil
+            return
+        }
+        rescheduleSystemTimer()
+        rescheduleQuotaTimer()
+    }
 
     /// 表示項目の変更。無効化した項目は共有ファイルからも消し、有効化した項目はその場で取りに行く
     func setEnabled(_ item: DisplayItem, _ isOn: Bool) {
@@ -168,7 +187,9 @@ final class UsageStore: ObservableObject {
             return
         }
         guard panelVisible else { return }
+        // メニューから指標を足した直後は、待たずに 1 回取る(定期更新だけを止める)
         sampleSystem()
+        guard !updatesPaused else { return }
         let timer = Timer(timeInterval: Self.systemInterval, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.sampleSystem() }
         }
@@ -180,7 +201,7 @@ final class UsageStore: ObservableObject {
         quotaTimer?.invalidate()
         quotaTimer = nil
         // サービスを 1 つも表示しないなら定期取得する対象が無い
-        guard !enabledServices.isEmpty else { return }
+        guard !enabledServices.isEmpty, !updatesPaused else { return }
         if panelVisible {
             scheduleQuotaTimer(interval: Self.visibleInterval)
         } else {

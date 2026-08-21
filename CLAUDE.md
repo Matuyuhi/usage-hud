@@ -67,3 +67,5 @@ scripts/bump-version.sh patch|minor|major
 - **Keychain は `security find-generic-password` コマンド経由で読む**（`SecItemCopyMatching` にしない）。API 直だと ACL がアプリの署名 identity に紐づき、ad-hoc ではリビルドごとに許可ダイアログが出る。コマンド経由ならダイアログ自体が出ない
 - 外部 CLI（`codex` / `gh` / `security`）は `ProcessSession` 経由で起動する。GUI アプリの PATH に Homebrew や `~/.local/bin` が無いため、PATH 前置をここで一元管理している
 - ビルド設定 `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`（本体のみ）。ブロッキング処理（プロセス起動・Keychain）は `runOffMain` + `nonisolated` で main を外すこと。実際に SecItemCopyMatching で UI ごと固まった経緯がある
+- **パネルは `FloatingPanel`（`canBecomeKey = true`）+ `hidesOnDeactivate = false`**。borderless の窓は key になれず、中の SwiftUI `Menu` が tracking を維持できない。NSPanel 既定の `hidesOnDeactivate` はメニュー操作でアプリのアクティブ状態が動いた拍子にパネルごと消す。両方合わさって設定メニューが点滅し操作できなくなった経緯がある
+- **メニューが開いている間はパネルを動かさない**。`NSMenu.didBegin/didEndTrackingNotification` を見て `UsageStore.setUpdatesPaused()` で定期更新を止め、`fitPanelToContent()` は閉じるまで保留する（開いた NSMenu は開いた時点のパネルに紐づくため、リサイズ・移動・再描画のたびに閉じる）。パネル外クリックで閉じる監視も tracking 中は無視する
