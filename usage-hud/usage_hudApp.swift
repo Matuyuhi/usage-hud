@@ -101,11 +101,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             needsFitAfterMenu = true
             return
         }
-        // 2 秒ごとのシステム指標の更新では行数は変わらない。
-        // 毎回 position し直すと、ユーザーがドラッグで動かしたパネルを右上へ引き戻してしまう
+        // 2 秒ごとのシステム指標の更新では行数は変わらないので、必要サイズが同じなら触らない
         let fitting = content.fittingSize
         guard fitting != content.frame.size else { return }
-        // 行が増減しても左上は動かさない(表示項目を切り替えただけでパネルが飛ばないように)
+        // 行が増減しても左上は固定する。position し直すと、ユーザーがドラッグで動かしたパネルを
+        // 右上へ引き戻してしまうし、開いているメニューの足元が動いて閉じてしまう
         let topLeft = NSPoint(x: panel.frame.minX, y: panel.frame.maxY)
         panel.setContentSize(fitting)
         panel.setFrameTopLeftPoint(topLeft)
