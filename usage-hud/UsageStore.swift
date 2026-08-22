@@ -21,6 +21,12 @@ final class UsageStore: ObservableObject {
     private var quotaTimer: Timer?
     private var systemTimer: Timer?
     private var panelVisible = false
+    /// メニュー表示中の一時停止。再描画が開いた NSMenu を組み直してしまうため、開いている間は更新しない
+    private var updatesPaused = false
+    /// メニュー表示中に取得が終わった場合の反映待ち(開いている間は @Published を触らない)
+    private var deferredResult: (snapshot: UsageSnapshot, sample: SystemSample?)?
+    /// 取得中かどうかの実体。表示用の isRefreshing は一時停止中は据え置くので分けて持つ
+    private var isFetching = false
     private var cooldownUntil: [String: Date] = [:]
     /// 取得中に項目が有効化された場合の再取得予約
     private var pendingRefresh = false
@@ -45,6 +51,29 @@ final class UsageStore: ObservableObject {
 
     func isEnabled(_ item: DisplayItem) -> Bool { enabled.contains(item) }
 
+    /// 設定メニューを開いている間は定期更新を止める。
+    /// 2 秒ごとのシステム指標でビューが作り直されると、開いているメニューが点滅して操作できない
+    func setUpdatesPaused(_ paused: Bool) {
+        guard updatesPaused != paused else { return }
+        updatesPaused = paused
+        guard !paused else {
+            // 止めるだけ。ここでサンプリングし直すと、開いた直後のメニューを潰してしまう
+            systemTimer?.invalidate()
+            systemTimer = nil
+            quotaTimer?.invalidate()
+            quotaTimer = nil
+            return
+        }
+        if let deferredResult {
+            self.deferredResult = nil
+            system = deferredResult.sample
+            publish(snapshot: withCurrentSelection(deferredResult.snapshot))
+        }
+        syncRefreshingIndicator()
+        rescheduleSystemTimer()
+        rescheduleQuotaTimer()
+    }
+
     /// 表示項目の変更。無効化した項目は共有ファイルからも消し、有効化した項目はその場で取りに行く
     func setEnabled(_ item: DisplayItem, _ isOn: Bool) {
         guard enabled.contains(item) != isOn else { return }
@@ -67,7 +96,7 @@ final class UsageStore: ObservableObject {
     }
 
     func refresh(force: Bool = false) {
-        guard !isRefreshing else {
+        guard !isFetching else {
             // 取得中に有効化されたサービスは、今の取得では拾えないので終わり次第もう一度回す
             pendingRefresh = pendingRefresh || force
             return
@@ -77,7 +106,8 @@ final class UsageStore: ObservableObject {
            Date().timeIntervalSince(last) < Self.minRefreshInterval {
             return
         }
-        isRefreshing = true
+        isFetching = true
+        syncRefreshingIndicator()
         Task {
             // 無効なサービスは fetch 自体を呼ばない(CLI の起動も HTTP 呼び出しも発生しない)
             async let claude = fetchService(.claude, current: snapshot?.claude, using: ClaudeFetcher.fetch)
@@ -85,15 +115,15 @@ final class UsageStore: ObservableObject {
             async let copilot = fetchService(.copilot, current: snapshot?.copilot, using: CopilotFetcher.fetch)
             let services = (claude: await claude, codex: await codex, copilot: await copilot)
             let sample = sampleForSnapshot()
-            system = sample
-            // 取得中に無効化されたサービスがあり得るので、公開前に今の選択で絞り直す
-            publish(snapshot: withCurrentSelection(UsageSnapshot(
+            let fresh = UsageSnapshot(
                 claude: services.claude,
                 codex: services.codex,
                 copilot: services.copilot,
                 system: sample,
-                fetchedAt: Date())))
-            isRefreshing = false
+                fetchedAt: Date())
+            isFetching = false
+            syncRefreshingIndicator()
+            applyOrDefer(fresh, sample: sample)
             if pendingRefresh {
                 pendingRefresh = false
                 refresh(force: true)
@@ -126,6 +156,24 @@ final class UsageStore: ObservableObject {
         return kept
     }
 
+    /// メニュー表示中に取得が終わったら、閉じるまで反映を待つ。
+    /// 開いている NSMenu は下のビューが作り直されると閉じてしまう
+    private func applyOrDefer(_ fresh: UsageSnapshot, sample: SystemSample?) {
+        guard !updatesPaused else {
+            deferredResult = (snapshot: fresh, sample: sample)
+            return
+        }
+        system = sample
+        // 取得中に無効化されたサービスがあり得るので、公開前に今の選択で絞り直す
+        publish(snapshot: withCurrentSelection(fresh))
+    }
+
+    /// 取得中インジケータ。一時停止中は再描画を避けるため、再開時にまとめて合わせる
+    private func syncRefreshingIndicator() {
+        guard !updatesPaused, isRefreshing != isFetching else { return }
+        isRefreshing = isFetching
+    }
+
     private func publish(snapshot newSnapshot: UsageSnapshot?) {
         guard let newSnapshot else { return }
         snapshot = newSnapshot
@@ -150,8 +198,8 @@ final class UsageStore: ObservableObject {
 
     private func sampleForSnapshot() -> SystemSample? {
         guard !enabledSystemMetrics.isEmpty else { return nil }
-        // パネル表示中は 2 秒間隔のサンプルが既にあるので、CPU の差分の基準を乱さないよう使い回す
-        if systemTimer != nil, let recent = system,
+        // 直前のサンプルがまだ新しければ使い回す。続けて引くと CPU の差分の窓が潰れて 0% になる
+        if let recent = system,
            Date().timeIntervalSince(recent.sampledAt) < Self.systemInterval * 2 {
             return recent
         }
@@ -167,7 +215,9 @@ final class UsageStore: ObservableObject {
             system = nil
             return
         }
-        guard panelVisible else { return }
+        // 一時停止中はサンプリングもしない(@Published system の更新でメニューが閉じてしまう)。
+        // 再開時にここへ戻ってきて 1 回取る
+        guard panelVisible, !updatesPaused else { return }
         sampleSystem()
         let timer = Timer(timeInterval: Self.systemInterval, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.sampleSystem() }
@@ -180,7 +230,7 @@ final class UsageStore: ObservableObject {
         quotaTimer?.invalidate()
         quotaTimer = nil
         // サービスを 1 つも表示しないなら定期取得する対象が無い
-        guard !enabledServices.isEmpty else { return }
+        guard !enabledServices.isEmpty, !updatesPaused else { return }
         if panelVisible {
             scheduleQuotaTimer(interval: Self.visibleInterval)
         } else {
