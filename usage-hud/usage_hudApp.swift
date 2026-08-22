@@ -117,11 +117,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let screen = panel.screen ?? NSScreen.main else { return }
         let visible = screen.visibleFrame
         let frame = panel.frame
+        // 縦は上端を優先して収める。画面より背が高いときに下端で揃えると、
+        // 更新・設定ボタンのあるヘッダが画面外に出て触れなくなる
         let origin = NSPoint(
             x: max(visible.minX + Self.screenMargin,
                    min(frame.minX, visible.maxX - frame.width - Self.screenMargin)),
-            y: max(visible.minY + Self.screenMargin,
-                   min(frame.minY, visible.maxY - frame.height - Self.screenMargin)))
+            y: min(max(frame.minY, visible.minY + Self.screenMargin),
+                   visible.maxY - frame.height - Self.screenMargin))
         guard origin != frame.origin else { return }
         panel.setFrameOrigin(origin)
     }
