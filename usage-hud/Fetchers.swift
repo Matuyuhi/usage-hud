@@ -291,7 +291,7 @@ nonisolated func looseDouble(_ any: Any?) -> Double? {
     return nil
 }
 
-private func runOffMain<T: Sendable>(_ work: @escaping @Sendable () -> T) async -> T {
+func runOffMain<T: Sendable>(_ work: @escaping @Sendable () -> T) async -> T {
     await withCheckedContinuation { continuation in
         DispatchQueue.global(qos: .userInitiated).async {
             continuation.resume(returning: work())
@@ -299,7 +299,7 @@ private func runOffMain<T: Sendable>(_ work: @escaping @Sendable () -> T) async 
     }
 }
 
-private func runOffMain<T: Sendable>(_ work: @escaping @Sendable () throws -> T) async throws -> T {
+func runOffMain<T: Sendable>(_ work: @escaping @Sendable () throws -> T) async throws -> T {
     try await withCheckedThrowingContinuation { continuation in
         DispatchQueue.global(qos: .userInitiated).async {
             continuation.resume(with: Result(catching: work))
@@ -308,8 +308,9 @@ private func runOffMain<T: Sendable>(_ work: @escaping @Sendable () throws -> T)
 }
 
 /// Homebrew 等の CLI を PATH 解決込みで起動し、行単位の対話(送信→応答待ち)を行うセッション。
-/// GUI アプリの PATH に CLI の場所が含まれないことがあるため、既知の bin ディレクトリを前置する
-private nonisolated final class ProcessSession {
+/// GUI アプリの PATH に CLI の場所が含まれないことがあるため、既知の bin ディレクトリを前置する。
+/// 外部コマンドの起動はここに集約する(ProcessSampler の ps もこれを使う)
+nonisolated final class ProcessSession {
     private let process = Process()
     private let stdinPipe = Pipe()
     private let stdoutPipe = Pipe()
