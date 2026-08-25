@@ -56,6 +56,17 @@ scripts/bump-version.sh patch|minor|major
   ウィジェットには出さないので共有 JSON には入れず、`UsageStore.processes` として本体だけが持つ。
   CPU / メモリのどちらかだけ有効な場合は、その列だけを `ps` に要求して片方の並びしか作らない
 
+#### プロセス名はアプリ名に直してからまとめる（`AppNames`）
+
+`ps` が返すのは実行ファイルなので、そのままだと Android Studio が `studio`、Electron 製アプリが
+`Slack Helper (Renderer)` のように出る。実行ファイルのパスに含まれる**一番外側の** `.app` まで遡り、
+そのバンドルの `CFBundleDisplayName` → `CFBundleName`（無ければバンドル名）を表示名にする。
+一番外側を採るのは、ヘルパー（`Foo.app/Contents/Frameworks/Foo Helper.app/…`）や XPC サービスを
+親アプリに寄せるため。同じバンドルに属するプロセスは 1 行にまとめて合計し、件数を `×3` で添える
+（別々に出すと上位 5 件が同じアプリで埋まり、アプリ全体の使用量も読めない）。
+`.app` の外にいる `WindowServer` などは、アクティビティモニタと同じく実行ファイル名のまま。
+バンドル名の読み出しは 5 秒ごとのディスク I/O になるのでプロセス内にキャッシュする
+
 ### データ源はすべて非公式 API（壊れたら都度直す前提）
 
 | サービス | 経路 | 注意 |
@@ -70,7 +81,7 @@ scripts/bump-version.sh patch|minor|major
 - **App Group は使わない**。App Group ID はチーム ID prefix が必須で ad-hoc と両立しない。共有キャッシュは実ホームの `Library/Application Support/usage-hud/usage.json` に置き、sandbox 内のウィジェットは temporary-exception entitlement（読み取り専用）+ `getpwuid` の実ホーム解決でアクセスする
 - **Keychain は `security find-generic-password` コマンド経由で読む**（`SecItemCopyMatching` にしない）。API 直だと ACL がアプリの署名 identity に紐づき、ad-hoc ではリビルドごとに許可ダイアログが出る。コマンド経由ならダイアログ自体が出ない
 - 外部 CLI（`codex` / `gh` / `security` / `ps`）は `ProcessSession` 経由で起動する。GUI アプリの PATH に Homebrew や `~/.local/bin` が無いため、PATH 前置をここで一元管理している
-- **プロセス一覧は libproc ではなく `ps`**。`libproc.h` は SDK の module map に無く Swift から直接呼べないうえ、`proc_pidinfo` は他ユーザ（root デーモン）のプロセスが EPERM になる。`ps -A -w -w -o pid= -o pcpu= -o rss= -o comm=`（列は有効な指標のぶんだけ）なら全プロセスが取れ、`%CPU` も OS 側の減衰平均をそのまま使える
+- **プロセス一覧は libproc ではなく `ps`**。`libproc.h` は SDK の module map に無く Swift から直接呼べないうえ、`proc_pidinfo` は他ユーザ（root デーモン）のプロセスが EPERM になる。`ps -A -w -w -o pcpu= -o rss= -o comm=`（列は有効な指標のぶんだけ）なら全プロセスが取れ、`%CPU` も OS 側の減衰平均をそのまま使える
 - ビルド設定 `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`（本体のみ）。ブロッキング処理（プロセス起動・Keychain）は `runOffMain` + `nonisolated` で main を外すこと。実際に SecItemCopyMatching で UI ごと固まった経緯がある
 - **パネルは `FloatingPanel`（`canBecomeKey = true`）+ `hidesOnDeactivate = false`**。borderless の窓は key になれず、中の SwiftUI `Menu` が tracking を維持できない。NSPanel 既定の `hidesOnDeactivate` はメニュー操作でアプリのアクティブ状態が動いた拍子にパネルごと消す。両方合わさって設定メニューが点滅し操作できなくなった経緯がある
 - **メニューが開いている間はパネルを動かさない**。`NSMenu.didBegin/didEndTrackingNotification` を見て `UsageStore.setUpdatesPaused()` で定期更新を止め、`fitPanelToContent()` は閉じるまで保留する（開いた NSMenu は開いた時点のパネルに紐づくため、リサイズ・移動・再描画のたびに閉じる）。パネル外クリックで閉じる監視も tracking 中は無視する
