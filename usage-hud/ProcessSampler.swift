@@ -159,8 +159,9 @@ nonisolated enum AppNames {
 }
 
 /// バンドルの表示名は毎回 Info.plist を読むと 5 秒ごとのディスク I/O になるので覚えておく。
-/// off-main の走査から呼ばれるだけだが、将来どこから呼ばれても壊れないようロックで守る
-private final class BundleNameCache: @unchecked Sendable {
+/// off-main の走査から呼ばれるだけだが、将来どこから呼ばれても壊れないようロックで守る。
+/// 本体は既定 MainActor 隔離なので nonisolated を明示する(付け忘れると呼び出し側でコンパイルが落ちる)
+private nonisolated final class BundleNameCache: @unchecked Sendable {
     private let lock = NSLock()
     private var names: [String: String] = [:]
 
