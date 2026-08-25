@@ -36,11 +36,14 @@ final class UsageStore: ObservableObject {
     private var systemDetailExpanded = false
     private var isSamplingProcesses = false
     private var lastProcessSampleAt: Date?
+    /// 今の一覧を取ったときの指標。選択が変わったら間引きを飛ばして取り直す
+    private var lastProcessMetrics: Set<DisplayItem>?
 
     private var enabledServices: Set<DisplayItem> { enabled.filter { $0.category == .service } }
     private var enabledSystemMetrics: Set<DisplayItem> { enabled.filter { $0.category == .system } }
-    /// 上位プロセスは CPU 順・メモリ順で出すので、どちらも無効なら取る意味が無い
-    private var needsProcesses: Bool { enabled.contains(.cpu) || enabled.contains(.memory) }
+    /// 上位プロセスに使う指標。無効な指標は ps の列にも入れないので、どちらも無効なら取る意味が無い
+    private var processMetrics: Set<DisplayItem> { enabled.intersection([.cpu, .memory]) }
+    private var needsProcesses: Bool { !processMetrics.isEmpty }
 
     func start() {
         snapshot = SharedStore.load()
@@ -219,18 +222,21 @@ final class UsageStore: ObservableObject {
     private func sampleProcesses(force: Bool = false) {
         guard systemDetailExpanded, needsProcesses else {
             lastProcessSampleAt = nil
+            lastProcessMetrics = nil
             if processes != nil { processes = nil }
             return
         }
-        if !force, let last = lastProcessSampleAt,
+        let metrics = processMetrics
+        if !force, lastProcessMetrics == metrics, let last = lastProcessSampleAt,
            Date().timeIntervalSince(last) < ProcessSampler.interval {
             return
         }
         guard !isSamplingProcesses else { return }
         isSamplingProcesses = true
         lastProcessSampleAt = Date()
+        lastProcessMetrics = metrics
         Task {
-            let sample = await ProcessSampler.sample()
+            let sample = await ProcessSampler.sample(metrics: metrics)
             isSamplingProcesses = false
             // 取得中に詳細が閉じられた / メニューが開いた場合は反映しない
             guard systemDetailExpanded, needsProcesses, !updatesPaused else { return }

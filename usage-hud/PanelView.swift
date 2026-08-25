@@ -148,12 +148,13 @@ struct PanelView: View {
     @ViewBuilder
     private var processLists: some View {
         if let processes = store.processes {
-            if systemMetrics.contains(.cpu) {
+            // 指標を切り替えた直後は、その指標のぶんがまだ入っていない一覧が残っている
+            if systemMetrics.contains(.cpu), !processes.topCPU.isEmpty {
                 ProcessList(
                     title: String(localized: "Top by CPU"),
                     rows: processes.topCPU.map { row($0, value: percentText($0.cpuPercent)) })
             }
-            if systemMetrics.contains(.memory) {
+            if systemMetrics.contains(.memory), !processes.topMemory.isEmpty {
                 ProcessList(
                     title: String(localized: "Top by memory"),
                     rows: processes.topMemory.map { row($0, value: byteText($0.memBytes)) })
