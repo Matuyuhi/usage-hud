@@ -167,7 +167,12 @@ struct PanelView: View {
     }
 
     private func row(_ process: ProcessUsage, value: String) -> ProcessRow {
-        ProcessRow(id: process.pid, name: process.name, value: value)
+        ProcessRow(
+            id: process.id,
+            name: process.name,
+            // まとめた件数。1 件なら添えない
+            count: process.processCount > 1 ? "\u{00d7}\(process.processCount)" : nil,
+            value: value)
     }
 
     /// 上位プロセスは CPU 順・メモリ順で出すので、どちらも表示しないなら出す中身が無い
@@ -415,10 +420,13 @@ private struct SectionHeader: View {
     }
 }
 
-/// 上位プロセス 1 行。CPU 順とメモリ順で値の意味が変わるので、文字列にしてから渡す
+/// 上位プロセス 1 行(同じアプリのヘルパーをまとめたもの)。
+/// CPU 順とメモリ順で値の意味が変わるので、文字列にしてから渡す
 private struct ProcessRow: Identifiable {
-    let id: Int32
+    let id: String
     let name: String
+    /// 同じアプリのプロセスをまとめた件数(1 件なら nil)
+    let count: String?
     let value: String
 }
 
@@ -437,6 +445,11 @@ private struct ProcessList: View {
                     Text(row.name)
                         .lineLimit(1)
                         .truncationMode(.middle)
+                    if let count = row.count {
+                        Text(count)
+                            .foregroundStyle(.tertiary)
+                            .monospacedDigit()
+                    }
                     Spacer(minLength: 0)
                     Text(row.value)
                         .monospacedDigit()
