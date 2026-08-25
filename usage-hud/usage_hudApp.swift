@@ -44,6 +44,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             DispatchQueue.main.async { self?.fitPanelToContent() }
         }
         .store(in: &resizeCancellables)
+        // 上位プロセスは詳細を開いた後から届くので、届いた時点でも合わせ直す
+        store.$processes.sink { [weak self] _ in
+            DispatchQueue.main.async { self?.fitPanelToContent() }
+        }
+        .store(in: &resizeCancellables)
         observeMenuTracking()
         hotKey = HotKey(keyCode: UInt32(kVK_ANSI_U), modifiers: [.control, .option]) { [weak self] in
             self?.togglePanel()

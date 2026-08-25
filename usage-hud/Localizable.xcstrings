@@ -660,6 +660,26 @@
           }
         }
       }
+    },
+    "Top by CPU" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CPU 使用率の上位"
+          }
+        }
+      }
+    },
+    "Top by memory" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "メモリ使用量の上位"
+          }
+        }
+      }
     }
   },
   "version" : "1.0"

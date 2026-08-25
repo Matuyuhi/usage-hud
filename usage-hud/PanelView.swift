@@ -6,6 +6,9 @@ struct PanelView: View {
     var requestResize: () -> Void
     @State private var expanded: Set<String> = []
 
+    /// System セクションの展開キー。サービスは rawValue を使うので、被らない固定文字列にする
+    private let systemKey = "system"
+
     /// 行間は Grid 全体で共通なので、セクションの見出し側に上余白を足して区切りを作る
     private let sectionGap: CGFloat = 8
 
@@ -44,6 +47,10 @@ struct PanelView: View {
             expanded.remove(key)
         } else {
             expanded.insert(key)
+        }
+        if key == systemKey {
+            // 上位プロセスは開いている間だけ取る(閉じれば ps の起動も止まる)
+            store.setSystemDetailExpanded(expanded.contains(systemKey))
         }
         resizeAfterLayout()
     }
@@ -103,12 +110,14 @@ struct PanelView: View {
     private var systemSection: some View {
         let system = store.system
         let details = system.map { systemDetails($0) } ?? []
+        let isExpanded = expanded.contains(systemKey)
         SectionHeader(
             name: String(localized: "System"),
             caption: nil,
-            isExpanded: expanded.contains("system"),
-            hasDetails: !details.isEmpty
-        ) { toggle("system") }
+            isExpanded: isExpanded,
+            // 上位プロセスだけでも展開する価値があるので、内訳が空でも開けるようにする
+            hasDetails: !details.isEmpty || showsProcesses
+        ) { toggle(systemKey) }
             .padding(.top, sectionGap)
         if let system {
             let rows = systemMetrics.compactMap { metricRow(for: $0, system: system) }
@@ -126,10 +135,44 @@ struct PanelView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-            if expanded.contains("system"), !details.isEmpty {
-                DetailList(items: details)
+            if isExpanded {
+                if !details.isEmpty {
+                    DetailList(items: details)
+                }
+                processLists
             }
         }
+    }
+
+    /// CPU / メモリの上位プロセス。表示している指標のぶんだけ出す
+    @ViewBuilder
+    private var processLists: some View {
+        if let processes = store.processes {
+            // 指標を切り替えた直後は、その指標のぶんがまだ入っていない一覧が残っている
+            if systemMetrics.contains(.cpu), !processes.topCPU.isEmpty {
+                ProcessList(
+                    title: String(localized: "Top by CPU"),
+                    rows: processes.topCPU.map { row($0, value: percentText($0.cpuPercent)) })
+            }
+            if systemMetrics.contains(.memory), !processes.topMemory.isEmpty {
+                ProcessList(
+                    title: String(localized: "Top by memory"),
+                    rows: processes.topMemory.map { row($0, value: byteText($0.memBytes)) })
+            }
+        } else if showsProcesses {
+            Text("Loading…")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func row(_ process: ProcessUsage, value: String) -> ProcessRow {
+        ProcessRow(id: process.pid, name: process.name, value: value)
+    }
+
+    /// 上位プロセスは CPU 順・メモリ順で出すので、どちらも表示しないなら出す中身が無い
+    private var showsProcesses: Bool {
+        systemMetrics.contains(.cpu) || systemMetrics.contains(.memory)
     }
 
     /// システム指標 1 行分。バーを持たない指標(ネットワーク)は fraction を nil にする
@@ -369,6 +412,42 @@ private struct SectionHeader: View {
         }
         .frame(minHeight: DesignTokens.minHitTarget)
         .contentShape(Rectangle())
+    }
+}
+
+/// 上位プロセス 1 行。CPU 順とメモリ順で値の意味が変わるので、文字列にしてから渡す
+private struct ProcessRow: Identifiable {
+    let id: Int32
+    let name: String
+    let value: String
+}
+
+/// 上位プロセスの一覧。名前が長いので 1 行 1 プロセスにして、右端に値を出す
+private struct ProcessList: View {
+    let title: String
+    let rows: [ProcessRow]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(title)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+            ForEach(rows) { row in
+                HStack(spacing: 6) {
+                    Text(row.name)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Spacer(minLength: 0)
+                    Text(row.value)
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                }
+                .font(.caption2)
+                .accessibilityElement(children: .combine)
+            }
+        }
+        .padding(.leading, 8)
+        .padding(.vertical, 2)
     }
 }
 

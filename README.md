@@ -26,6 +26,7 @@ cd usage-hud && scripts/install.sh
 
 - `⌃⌥U` toggles the panel (clicking outside it closes it too)
 - Click a service name to expand its details (raw credit counts, reset time, and so on)
+- Click "System" to expand the memory breakdown and the top 5 processes by CPU and by memory (the process list is only collected while that section is open)
 - Pick what to show from "Display items" in the gear menu — anything you turn off is not fetched or sampled at all, so unused services cost nothing
 - Turn on "Launch at login" from the gear menu
 - Add the Notification Center widget from "Edit Widgets → Usage HUD"
@@ -41,6 +42,7 @@ cd usage-hud && scripts/install.sh
 | Network | No | Throughput across the physical interfaces |
 
 Turning an item off stops its fetching and sampling, not just its row.
+The top process lists come from `ps`, so they follow CPU and Memory: they show up under "System" only while that section is expanded, and only for the metrics you kept on.
 
 ## Requirements
 

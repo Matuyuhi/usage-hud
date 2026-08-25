@@ -6,6 +6,8 @@ import WidgetKit
 final class UsageStore: ObservableObject {
     @Published private(set) var snapshot: UsageSnapshot?
     @Published private(set) var system: SystemSample?
+    /// CPU / メモリの上位プロセス。System の詳細を開いている間だけ入る
+    @Published private(set) var processes: ProcessSample?
     @Published private(set) var isRefreshing = false
     /// 表示する項目。無効な項目は取得も行わない
     @Published private(set) var enabled: Set<DisplayItem> = DisplayPreferences.load()
@@ -30,9 +32,18 @@ final class UsageStore: ObservableObject {
     private var cooldownUntil: [String: Date] = [:]
     /// 取得中に項目が有効化された場合の再取得予約
     private var pendingRefresh = false
+    /// System の詳細(上位プロセス)を開いているか。ps を起動するので開いている間だけ取る
+    private var systemDetailExpanded = false
+    private var isSamplingProcesses = false
+    private var lastProcessSampleAt: Date?
+    /// 今の一覧を取ったときの指標。選択が変わったら間引きを飛ばして取り直す
+    private var lastProcessMetrics: Set<DisplayItem>?
 
     private var enabledServices: Set<DisplayItem> { enabled.filter { $0.category == .service } }
     private var enabledSystemMetrics: Set<DisplayItem> { enabled.filter { $0.category == .system } }
+    /// 上位プロセスに使う指標。無効な指標は ps の列にも入れないので、どちらも無効なら取る意味が無い
+    private var processMetrics: Set<DisplayItem> { enabled.intersection([.cpu, .memory]) }
+    private var needsProcesses: Bool { !processMetrics.isEmpty }
 
     func start() {
         snapshot = SharedStore.load()
@@ -50,6 +61,16 @@ final class UsageStore: ObservableObject {
     }
 
     func isEnabled(_ item: DisplayItem) -> Bool { enabled.contains(item) }
+
+    /// System セクションの詳細を開いた / 閉じた。
+    /// 上位プロセスは全プロセスを列挙する ps を回すため、開いている間だけ取る
+    func setSystemDetailExpanded(_ expanded: Bool) {
+        guard systemDetailExpanded != expanded else { return }
+        systemDetailExpanded = expanded
+        // メニュー表示中は @Published を触らない(閉じたときに rescheduleSystemTimer から取り直す)
+        guard !updatesPaused else { return }
+        sampleProcesses(force: expanded)
+    }
 
     /// 設定メニューを開いている間は定期更新を止める。
     /// 2 秒ごとのシステム指標でビューが作り直されると、開いているメニューが点滅して操作できない
@@ -194,6 +215,33 @@ final class UsageStore: ObservableObject {
 
     private func sampleSystem() {
         system = sampler.sample(enabled: enabledSystemMetrics)
+        sampleProcesses()
+    }
+
+    /// 上位プロセスの取得。ps の起動は 2 秒より粗い間隔に間引き、開いた直後だけ force で即取る
+    private func sampleProcesses(force: Bool = false) {
+        guard systemDetailExpanded, needsProcesses else {
+            lastProcessSampleAt = nil
+            lastProcessMetrics = nil
+            if processes != nil { processes = nil }
+            return
+        }
+        let metrics = processMetrics
+        if !force, lastProcessMetrics == metrics, let last = lastProcessSampleAt,
+           Date().timeIntervalSince(last) < ProcessSampler.interval {
+            return
+        }
+        guard !isSamplingProcesses else { return }
+        isSamplingProcesses = true
+        lastProcessSampleAt = Date()
+        lastProcessMetrics = metrics
+        Task {
+            let sample = await ProcessSampler.sample(metrics: metrics)
+            isSamplingProcesses = false
+            // 取得中に詳細が閉じられた / メニューが開いた場合は反映しない
+            guard systemDetailExpanded, needsProcesses, !updatesPaused else { return }
+            processes = sample
+        }
     }
 
     private func sampleForSnapshot() -> SystemSample? {
@@ -213,6 +261,7 @@ final class UsageStore: ObservableObject {
         guard !enabledSystemMetrics.isEmpty else {
             // 全部無効になったら共有ファイルにも残さない
             system = nil
+            sampleProcesses()
             return
         }
         // 一時停止中はサンプリングもしない(@Published system の更新でメニューが閉じてしまう)。
