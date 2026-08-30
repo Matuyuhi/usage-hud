@@ -49,7 +49,7 @@ nonisolated enum ProcessSampler {
         if needsMemory { arguments += ["-o", "rss="] }
         arguments += ["-o", "comm="]
 
-        guard let session = try? ProcessSession(command: "ps", arguments: arguments, timeout: 5)
+        guard let session = try? ProcessSession(command: "ps", arguments: arguments, timeout: 5, prependCustomPaths: false)
         else { return nil }
         defer { session.terminate() }
         session.readUntilEOF()
