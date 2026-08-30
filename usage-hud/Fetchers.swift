@@ -37,7 +37,8 @@ enum ClaudeFetcher {
         let session = try ProcessSession(
             command: "security",
             arguments: ["find-generic-password", "-s", "Claude Code-credentials", "-w"],
-            timeout: 10)
+            timeout: 10,
+            prependCustomPaths: false)
         defer { session.terminate() }
         session.readUntilEOF()
         let raw = session.lines().joined()
@@ -318,14 +319,16 @@ nonisolated final class ProcessSession {
     private let deadline: Date
     private let command: String
 
-    init(command: String, arguments: [String], timeout: TimeInterval) throws {
+    init(command: String, arguments: [String], timeout: TimeInterval, prependCustomPaths: Bool = true) throws {
         self.command = command
         self.deadline = Date().addingTimeInterval(timeout)
         process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
         process.arguments = [command] + arguments
         var environment = ProcessInfo.processInfo.environment
         let path = environment["PATH"] ?? "/usr/bin:/bin"
-        environment["PATH"] = "\(NSHomeDirectory())/.local/bin:/opt/homebrew/bin:/usr/local/bin:" + path
+        if prependCustomPaths {
+            environment["PATH"] = "\(NSHomeDirectory())/.local/bin:/opt/homebrew/bin:/usr/local/bin:" + path
+        }
         process.environment = environment
         process.standardOutput = stdoutPipe
         process.standardInput = stdinPipe
