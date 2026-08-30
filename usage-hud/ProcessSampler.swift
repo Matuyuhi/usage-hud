@@ -152,9 +152,13 @@ nonisolated enum AppNames {
     /// "/Applications/Slack.app/Contents/Frameworks/Slack Helper.app/Contents/MacOS/Slack Helper"
     /// → "/Applications/Slack.app"
     private static func outermostAppBundle(in path: String) -> String? {
-        let components = path.split(separator: "/", omittingEmptySubsequences: false)
-        guard let end = components.firstIndex(where: { $0.hasSuffix(".app") }) else { return nil }
-        return components[...end].joined(separator: "/")
+        // Optimize: avoid split allocations since this is called frequently for many processes
+        if let range = path.range(of: ".app/") {
+            return String(path[..<range.lowerBound]) + ".app"
+        } else if path.hasSuffix(".app") {
+            return path
+        }
+        return nil
     }
 }
 
