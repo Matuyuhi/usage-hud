@@ -37,8 +37,7 @@ enum ClaudeFetcher {
         let session = try ProcessSession(
             command: "security",
             arguments: ["find-generic-password", "-s", "Claude Code-credentials", "-w"],
-            timeout: 10,
-            prependCustomPaths: false)
+            timeout: 10)
         defer { session.terminate() }
         session.readUntilEOF()
         let raw = session.lines().joined()
@@ -113,7 +112,7 @@ enum CodexFetcher {
     }
 
     private nonisolated static func fetchSync() throws -> ServiceUsage {
-        let session = try ProcessSession(command: "codex", arguments: ["app-server"], timeout: 15)
+        let session = try ProcessSession(command: "codex", arguments: ["app-server"], timeout: 15, prependCustomPaths: true)
         defer { session.terminate() }
         // initialize の応答を待ってから次を送る。まとめて書き込むと app-server が 2 通目を無視する
         session.send(#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"clientInfo":{"name":"usage-hud","title":"usage-hud","version":"1.0"}}}"#)
@@ -186,7 +185,7 @@ enum CopilotFetcher {
     }
 
     private nonisolated static func ghToken() throws -> String {
-        let session = try ProcessSession(command: "gh", arguments: ["auth", "token"], timeout: 10)
+        let session = try ProcessSession(command: "gh", arguments: ["auth", "token"], timeout: 10, prependCustomPaths: true)
         defer { session.terminate() }
         session.readUntilEOF()
         guard let token = session.lines().first(where: { !$0.isEmpty }) else {
@@ -319,7 +318,7 @@ nonisolated final class ProcessSession {
     private let deadline: Date
     private let command: String
 
-    init(command: String, arguments: [String], timeout: TimeInterval, prependCustomPaths: Bool = true) throws {
+    init(command: String, arguments: [String], timeout: TimeInterval, prependCustomPaths: Bool = false) throws {
         self.command = command
         self.deadline = Date().addingTimeInterval(timeout)
         process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
