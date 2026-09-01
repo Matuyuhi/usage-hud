@@ -41,7 +41,7 @@ enum ClaudeFetcher {
             prependCustomPaths: false)
         defer { session.terminate() }
         session.readUntilEOF()
-        let raw = session.lines().joined()
+        let raw = String(session.lines().joined())
         guard !raw.isEmpty else {
             throw FetchError.message(String(localized: "No credentials in Keychain (sign in with claude)"))
         }
@@ -122,7 +122,7 @@ enum CodexFetcher {
         try session.waitForLine(containing: "\"id\":2")
         let output = session.lines()
         guard let line = output.first(where: { $0.contains("\"id\":2") }),
-              let json = try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any],
+              let json = try? JSONSerialization.jsonObject(with: Data(String(line).utf8)) as? [String: Any],
               let result = json["result"] as? [String: Any],
               let rateLimits = result["rateLimits"] as? [String: Any]
         else { throw FetchError.message(String(localized: "Could not read rateLimits (check codex login)")) }
@@ -192,7 +192,7 @@ enum CopilotFetcher {
         guard let token = session.lines().first(where: { !$0.isEmpty }) else {
             throw FetchError.message(String(localized: "Not signed in to gh (run gh auth login)"))
         }
-        return token.trimmingCharacters(in: .whitespacesAndNewlines)
+        return String(token).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private static func parse(_ data: Data) throws -> ServiceUsage {
@@ -370,8 +370,10 @@ nonisolated final class ProcessSession {
         }
     }
 
-    func lines() -> [String] {
-        String(decoding: buffer, as: UTF8.self).split(separator: "\n").map(String.init)
+    // Optimize: Returning [Substring] directly instead of mapping to String avoids
+    // hundreds of heap allocations on every ps sample tick.
+    func lines() -> [Substring] {
+        String(decoding: buffer, as: UTF8.self).split(separator: "\n")
     }
 
     func terminate() {
