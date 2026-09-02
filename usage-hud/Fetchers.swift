@@ -328,7 +328,7 @@ nonisolated final class ProcessSession {
         let path = environment["PATH"] ?? "/usr/bin:/bin"
         environment["PATH"] = prependCustomPaths
             ? "\(NSHomeDirectory())/.local/bin:/opt/homebrew/bin:/usr/local/bin:" + path
-            : path
+            : "/usr/bin:/bin:/usr/sbin:/sbin"
         process.environment = environment
         process.standardOutput = stdoutPipe
         process.standardInput = stdinPipe
