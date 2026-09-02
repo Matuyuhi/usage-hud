@@ -192,7 +192,7 @@ enum CopilotFetcher {
         guard let token = session.lines().first(where: { !$0.isEmpty }) else {
             throw FetchError.message(String(localized: "Not signed in to gh (run gh auth login)"))
         }
-        return token.trimmingCharacters(in: .whitespacesAndNewlines)
+        return String(token).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private static func parse(_ data: Data) throws -> ServiceUsage {
@@ -370,8 +370,9 @@ nonisolated final class ProcessSession {
         }
     }
 
-    func lines() -> [String] {
-        String(decoding: buffer, as: UTF8.self).split(separator: "\n").map(String.init)
+    // Optimize: return [Substring] to avoid allocating a new String for every line of command output
+    func lines() -> [Substring] {
+        String(decoding: buffer, as: UTF8.self).split(separator: "\n")
     }
 
     func terminate() {
