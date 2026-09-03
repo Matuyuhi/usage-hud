@@ -96,8 +96,8 @@ nonisolated enum ProcessSampler {
     /// "  4.5  98304 /Applications/Foo.app/Contents/MacOS/Foo" の 1 行。
     /// 先頭の 2 列は要求したときだけ出るので、有効な指標に合わせて読み進める。
     /// 実行ファイルのパスには空白が入るので、残り全部をパスに使う
-    private static func parse(_ line: String, cpu: Bool, memory: Bool) -> Entry? {
-        var rest = Substring(line)
+    private static func parse(_ line: Substring, cpu: Bool, memory: Bool) -> Entry? {
+        var rest = line
         func nextField() -> Substring? {
             rest = rest.drop { $0 == " " }
             let field = rest.prefix { $0 != " " }
