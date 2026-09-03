@@ -324,10 +324,12 @@ nonisolated final class ProcessSession {
         process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
         process.arguments = [command] + arguments
         var environment = ProcessInfo.processInfo.environment
-        let path = environment["PATH"] ?? "/usr/bin:/bin"
+        let inheritedPath = environment["PATH"] ?? "/usr/bin:/bin"
+        // Use a fixed system-only path by default to prevent PATH hijacking
+        let systemPath = "/usr/bin:/bin:/usr/sbin:/sbin"
         environment["PATH"] = prependCustomPaths
-            ? "\(NSHomeDirectory())/.local/bin:/opt/homebrew/bin:/usr/local/bin:" + path
-            : path
+            ? "\(NSHomeDirectory())/.local/bin:/opt/homebrew/bin:/usr/local/bin:" + inheritedPath
+            : systemPath
         process.environment = environment
         process.standardOutput = stdoutPipe
         process.standardInput = stdinPipe
