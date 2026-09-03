@@ -80,7 +80,9 @@ scripts/bump-version.sh patch|minor|major
 - **署名は ad-hoc 固定**（`CODE_SIGN_IDENTITY = "-"`、チーム設定なし）。どのマシンでも Apple ID・証明書なしでビルドできることが要件。DEVELOPMENT_TEAM を足さない
 - **App Group は使わない**。App Group ID はチーム ID prefix が必須で ad-hoc と両立しない。共有キャッシュは実ホームの `Library/Application Support/usage-hud/usage.json` に置き、sandbox 内のウィジェットは temporary-exception entitlement（読み取り専用）+ `getpwuid` の実ホーム解決でアクセスする
 - **Keychain は `security find-generic-password` コマンド経由で読む**（`SecItemCopyMatching` にしない）。API 直だと ACL がアプリの署名 identity に紐づき、ad-hoc ではリビルドごとに許可ダイアログが出る。コマンド経由ならダイアログ自体が出ない
-- 外部 CLI（`codex` / `gh` / `security` / `ps`）は `ProcessSession` 経由で起動する。GUI アプリの PATH に Homebrew や `~/.local/bin` が無いため、PATH 前置をここで一元管理している
+- 外部 CLI（`codex` / `gh` / `security` / `ps`）は `ProcessSession` 経由で起動する。GUI アプリの PATH に Homebrew や `~/.local/bin` が無いため、PATH 前置をここで一元管理している。
+  **前置は `prependCustomPaths: true` の opt-in**（既定は `/usr/bin:/bin:/usr/sbin:/sbin` 固定）。ユーザーが書き込めるディレクトリを前置すると
+  偽の実行ファイルに乗っ取られる（CWE-426）ので、true にしてよいのは Homebrew 等に入る `codex` / `gh` だけ。`security` / `ps` のような system コマンドは既定のまま使う
 - **プロセス一覧は libproc ではなく `ps`**。`libproc.h` は SDK の module map に無く Swift から直接呼べないうえ、`proc_pidinfo` は他ユーザ（root デーモン）のプロセスが EPERM になる。`ps -A -w -w -o pcpu= -o rss= -o comm=`（列は有効な指標のぶんだけ）なら全プロセスが取れ、`%CPU` も OS 側の減衰平均をそのまま使える
 - ビルド設定 `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`（本体のみ）。ブロッキング処理（プロセス起動・Keychain）は `runOffMain` + `nonisolated` で main を外すこと。実際に SecItemCopyMatching で UI ごと固まった経緯がある
 - **パネルは `FloatingPanel`（`canBecomeKey = true`）+ `hidesOnDeactivate = false`**。borderless の窓は key になれず、中の SwiftUI `Menu` が tracking を維持できない。NSPanel 既定の `hidesOnDeactivate` はメニュー操作でアプリのアクティブ状態が動いた拍子にパネルごと消す。両方合わさって設定メニューが点滅し操作できなくなった経緯がある
