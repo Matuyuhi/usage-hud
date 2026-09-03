@@ -189,7 +189,7 @@ enum CopilotFetcher {
         let session = try ProcessSession(command: "gh", arguments: ["auth", "token"], timeout: 10)
         defer { session.terminate() }
         session.readUntilEOF()
-        guard let token = session.lines().first(where: { !$0.isEmpty }) else {
+        guard let token = session.lines().first(where: { !$0.isEmpty }).map(String.init) else {
             throw FetchError.message(String(localized: "Not signed in to gh (run gh auth login)"))
         }
         return token.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -370,8 +370,8 @@ nonisolated final class ProcessSession {
         }
     }
 
-    func lines() -> [String] {
-        String(decoding: buffer, as: UTF8.self).split(separator: "\n").map(String.init)
+    func lines() -> [Substring] {
+        String(decoding: buffer, as: UTF8.self).split(separator: "\n")
     }
 
     func terminate() {
