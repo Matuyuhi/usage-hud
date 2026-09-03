@@ -349,6 +349,7 @@ nonisolated final class ProcessSession {
     /// needle を含む行(改行まで到達済み)が現れるまで stdout を読む
     func waitForLine(containing needle: String) throws {
         let handle = stdoutPipe.fileHandleForReading
+        let maxBufferSize = 5 * 1024 * 1024 // 5MB limit (prevent DoS)
         while Date() < deadline {
             let text = String(decoding: buffer, as: UTF8.self)
             if let range = text.range(of: needle), text[range.upperBound...].contains("\n") {
@@ -357,6 +358,9 @@ nonisolated final class ProcessSession {
             let chunk = handle.availableData
             if chunk.isEmpty { break }  // EOF
             buffer.append(chunk)
+            if buffer.count > maxBufferSize {
+                throw FetchError.message(String(localized: "Output exceeded maximum buffer size"))
+            }
         }
         throw FetchError.message(
             String(format: String(localized: "%@ is not responding (check that you are signed in)"), command))
@@ -365,10 +369,12 @@ nonisolated final class ProcessSession {
     func readUntilEOF() {
         stdinPipe.fileHandleForWriting.closeFile()
         let handle = stdoutPipe.fileHandleForReading
+        let maxBufferSize = 5 * 1024 * 1024 // 5MB limit (prevent DoS)
         while Date() < deadline {
             let chunk = handle.availableData
             if chunk.isEmpty { break }
             buffer.append(chunk)
+            if buffer.count > maxBufferSize { break } // truncate to prevent memory exhaustion
         }
     }
 
