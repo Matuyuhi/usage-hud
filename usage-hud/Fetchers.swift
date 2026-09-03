@@ -8,6 +8,7 @@ enum ClaudeFetcher {
             // Keychain 許可ダイアログ表示中に main thread を塞がないよう off-main で読む
             let token = try await runOffMain { try accessToken() }
             var request = URLRequest(url: URL(string: "https://api.anthropic.com/api/oauth/usage")!)
+            request.timeoutInterval = 10
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
             request.setValue("oauth-2025-04-20", forHTTPHeaderField: "anthropic-beta")
             let (data, response) = try await URLSession.shared.data(for: request)
@@ -41,7 +42,7 @@ enum ClaudeFetcher {
             prependCustomPaths: false)
         defer { session.terminate() }
         session.readUntilEOF()
-        let raw = session.lines().joined()
+        let raw = String(session.lines().joined())
         guard !raw.isEmpty else {
             throw FetchError.message(String(localized: "No credentials in Keychain (sign in with claude)"))
         }
@@ -122,7 +123,7 @@ enum CodexFetcher {
         try session.waitForLine(containing: "\"id\":2")
         let output = session.lines()
         guard let line = output.first(where: { $0.contains("\"id\":2") }),
-              let json = try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any],
+              let json = try? JSONSerialization.jsonObject(with: Data(String(line).utf8)) as? [String: Any],
               let result = json["result"] as? [String: Any],
               let rateLimits = result["rateLimits"] as? [String: Any]
         else { throw FetchError.message(String(localized: "Could not read rateLimits (check codex login)")) }
@@ -167,6 +168,7 @@ enum CopilotFetcher {
         do {
             let token = try await runOffMain { try ghToken() }
             var request = URLRequest(url: URL(string: "https://api.github.com/copilot_internal/user")!)
+            request.timeoutInterval = 10
             request.setValue("token \(token)", forHTTPHeaderField: "Authorization")
             let (data, response) = try await URLSession.shared.data(for: request)
             guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
@@ -192,7 +194,7 @@ enum CopilotFetcher {
         guard let token = session.lines().first(where: { !$0.isEmpty }) else {
             throw FetchError.message(String(localized: "Not signed in to gh (run gh auth login)"))
         }
-        return token.trimmingCharacters(in: .whitespacesAndNewlines)
+        return String(token).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private static func parse(_ data: Data) throws -> ServiceUsage {
@@ -328,7 +330,7 @@ nonisolated final class ProcessSession {
         let path = environment["PATH"] ?? "/usr/bin:/bin"
         environment["PATH"] = prependCustomPaths
             ? "\(NSHomeDirectory())/.local/bin:/opt/homebrew/bin:/usr/local/bin:" + path
-            : path
+            : "/usr/bin:/bin:/usr/sbin:/sbin"
         process.environment = environment
         process.standardOutput = stdoutPipe
         process.standardInput = stdinPipe
@@ -376,8 +378,10 @@ nonisolated final class ProcessSession {
         }
     }
 
-    func lines() -> [String] {
-        String(decoding: buffer, as: UTF8.self).split(separator: "\n").map(String.init)
+    // Optimize: Returning [Substring] directly instead of mapping to String avoids
+    // hundreds of heap allocations on every ps sample tick.
+    func lines() -> [Substring] {
+        String(decoding: buffer, as: UTF8.self).split(separator: "\n")
     }
 
     func terminate() {

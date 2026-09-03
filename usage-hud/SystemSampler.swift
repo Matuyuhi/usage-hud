@@ -212,7 +212,8 @@ final class SystemSampler {
             // USB アダプタ)は en* で、VPN(utun*)・ブリッジ(bridge*)・AirDrop(awdl*/llw*)は
             // 実体の en* と同じ通信を重ねて数えてしまうため足さない
             guard interface.ifa_addr?.pointee.sa_family == UInt8(AF_LINK),
-                  String(cString: interface.ifa_name).hasPrefix("en"),
+                  let name = interface.ifa_name,
+                  name[0] == 101 && name[1] == 110, // Optimize: avoid String allocations in 2s loop by checking "en" directly ('e' = 101, 'n' = 110)
                   let data = interface.ifa_data?.assumingMemoryBound(to: if_data.self)
             else { continue }
             inBytes += UInt64(data.pointee.ifi_ibytes)
