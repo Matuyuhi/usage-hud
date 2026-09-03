@@ -8,6 +8,7 @@ enum ClaudeFetcher {
             // Keychain 許可ダイアログ表示中に main thread を塞がないよう off-main で読む
             let token = try await runOffMain { try accessToken() }
             var request = URLRequest(url: URL(string: "https://api.anthropic.com/api/oauth/usage")!)
+            request.timeoutInterval = 10
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
             request.setValue("oauth-2025-04-20", forHTTPHeaderField: "anthropic-beta")
             let (data, response) = try await URLSession.shared.data(for: request)
@@ -167,6 +168,7 @@ enum CopilotFetcher {
         do {
             let token = try await runOffMain { try ghToken() }
             var request = URLRequest(url: URL(string: "https://api.github.com/copilot_internal/user")!)
+            request.timeoutInterval = 10
             request.setValue("token \(token)", forHTTPHeaderField: "Authorization")
             let (data, response) = try await URLSession.shared.data(for: request)
             guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
