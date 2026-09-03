@@ -291,6 +291,16 @@
         }
       }
     },
+    "Output exceeded maximum buffer size" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "出力が上限サイズを超えました"
+          }
+        }
+      }
+    },
     "Overage" : {
       "localizations" : {
         "ja" : {
