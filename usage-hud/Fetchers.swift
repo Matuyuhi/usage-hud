@@ -327,8 +327,24 @@ nonisolated final class ProcessSession {
     init(command: String, arguments: [String], timeout: TimeInterval, prependCustomPaths: Bool = false) throws {
         self.command = command
         self.deadline = Date().addingTimeInterval(timeout)
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = [command] + arguments
+        if prependCustomPaths {
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+            process.arguments = [command] + arguments
+        } else {
+            // Defense in depth: bypass the environment's PATH resolution for known system
+            // binaries to prevent untrusted search path vulnerabilities (CWE-426).
+            switch command {
+            case "ps":
+                process.executableURL = URL(fileURLWithPath: "/bin/ps")
+                process.arguments = arguments
+            case "security":
+                process.executableURL = URL(fileURLWithPath: "/usr/bin/security")
+                process.arguments = arguments
+            default:
+                process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+                process.arguments = [command] + arguments
+            }
+        }
         var environment = ProcessInfo.processInfo.environment
         let path = environment["PATH"] ?? "/usr/bin:/bin"
         environment["PATH"] = prependCustomPaths
