@@ -1,4 +1,5 @@
 import AppKit
+import CoreGraphics
 import Foundation
 import SwiftUI
 import XCTest
@@ -37,6 +38,12 @@ struct SnapshotPixels {
     init(_ image: CGImage) {
         width = image.width
         height = image.height
+        rgba = Self.decode(image)
+    }
+
+    private static func decode(_ image: CGImage) -> [UInt8] {
+        let width = image.width
+        let height = image.height
         var data = [UInt8](repeating: 0, count: width * height * 4)
         data.withUnsafeMutableBytes { buffer in
             let context = CGContext(
@@ -45,7 +52,7 @@ struct SnapshotPixels {
                 bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
             context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
         }
-        rgba = data
+        return data
     }
 
     fileprivate init(width: Int, height: Int, rgba: [UInt8]) {
