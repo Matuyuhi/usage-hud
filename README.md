@@ -7,7 +7,7 @@
 A macOS background app that shows the remaining Copilot / Claude Code / Codex usage together with CPU, memory, battery, disk and network load, all on one panel.
 It adds no menu bar icon — press `⌃⌥U` whenever you want to see it.
 
-<img src="docs/panel.png" alt="usage-hud panel" width="346">
+<img src="docs/panel.png" alt="usage-hud panel" width="300">
 
 ## Install
 

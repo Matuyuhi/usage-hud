@@ -59,6 +59,9 @@ universal Release ビルド・上のチェック・スナップショットテ�
   不透明背景に差し替える）、`UsageWidgetView(snapshot:family:)`（環境の `widgetFamily` は書き込めないので引数で受ける。
   ウィジェットの描画本体を `shared/` に置いているのはこのため。extension はテストのホストになれない）
 - XCTest のホストとして起動されたときは `AppDelegate` が何も始めない（`XCTestSessionIdentifier` を見る）
+- **README の画像（`docs/panel.png` / `docs/panel.ja.png`）は参照画像のコピー**（`panel-default.*.dark.png`）。
+  `scripts/sync-readme-images.sh` が作り、Record snapshots が撮り直しのたびに呼ぶ。実機スクショは撮らない。
+  ずれは `check-invariants.sh` が `--check` で見張る
 
 ## アーキテクチャ
 
