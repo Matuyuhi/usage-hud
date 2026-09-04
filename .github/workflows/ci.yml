@@ -76,10 +76,16 @@ jobs:
 
   # パネル / ウィジェットのスナップショットテスト。参照画像は usage-hud-tests/__Snapshots__ にあり、
   # 見た目を意図して変えた PR では Record snapshots ワークフロー（snapshots.yml）で撮り直してコミットする。
-  # 描画結果は毎回 artifact に上げるので、PR の見た目はそこで確認できる（不一致なら diff/ と expected/ も入る）
+  # 描画結果は毎回 artifact に上げる（不一致なら diff/ と expected/ も入る）。
+  # 不一致があれば expected / actual / diff を PR のコメントに画像で出す（scripts/snapshot-report.sh）。
+  # そのために画像を snapshot-previews ブランチへ push するので、このジョブだけ書き込み権限を持つ。
+  # fork からの PR はトークンが読み取り専用なのでコメントは出さない（artifact で見る）
   snapshots:
     name: Snapshot tests
     runs-on: macos-26
+    permissions:
+      contents: write
+      pull-requests: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -87,6 +93,7 @@ jobs:
         run: xcodebuild -version
 
       - name: Run snapshot tests (en_US / ja_JP)
+        id: test
         run: scripts/snapshot-test.sh
 
       - name: Upload rendered snapshots
@@ -96,3 +103,16 @@ jobs:
           name: snapshots
           path: build-test/snapshots
           if-no-files-found: ignore
+
+      - name: Report differences on the PR
+        # テストの成否に関わらず走らせる（緑に戻ったとき、前回のコメントを「差分なし」に更新するため）
+        if: >-
+          always() && github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name == github.repository &&
+          steps.test.outcome != 'skipped'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: scripts/snapshot-report.sh
