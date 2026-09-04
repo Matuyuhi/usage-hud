@@ -1,14 +1,12 @@
 #!/bin/sh
 # スナップショットテストの結果を PR のコメントに出す（CI の Snapshot tests ジョブから呼ぶ）。
 #
-# 不一致があれば expected / actual / diff の画像を orphan ブランチ snapshot-previews に置き、
-# その raw URL を並べた表をコメントにする（PR ごとに 1 つのコメントを更新する）。
+# 不一致があれば expected / actual / diff の画像を orphan ブランチ snapshot-previews に置き
+# （scripts/snapshot-previews.sh）、その raw URL を並べた表をコメントにする（PR ごとに 1 つのコメントを更新する）。
 # 不一致が無ければ、既にコメントがあるときだけ「差分なし」に更新し、ブランチ上の画像も消す。
 #
 # 画像を GitHub 上でそのまま表示するには https の URL が要る（コメントへの添付 API は無く、
 # data: URI も落とされる）。artifact は zip で直接は見えないので、リポジトリ内の専用ブランチに置く。
-# ブランチは履歴を持たせない: 毎回 親なしの commit を作って force push するので常に 1 commit で、
-# 中身は「開いている PR の最新 1 回分」だけ。閉じた PR の分はここで消す。
 #
 # 必要な環境変数:
 #   GH_TOKEN        contents: write と pull-requests: write を持つトークン
@@ -51,47 +49,6 @@ post_comment() {
   fi
 }
 
-# snapshot-previews を「この PR の今回分 + 開いている他 PR の分」だけの 1 commit に作り直して force push する。
-# $1 が空ならこの PR の分を消すだけ
-sync_previews() {
-  worktree="$(mktemp -d)/preview"
-  if git fetch -q origin "$PREVIEW_BRANCH" 2>/dev/null; then
-    git worktree add -q --detach "$worktree" FETCH_HEAD
-  else
-    git worktree add -q --detach "$worktree"
-    git -C "$worktree" checkout -q --orphan "$PREVIEW_BRANCH"
-    git -C "$worktree" rm -rfq . 2>/dev/null || true
-  fi
-  printf '# snapshot previews\n\nCI が PR のスナップショット差分画像を置くブランチ。履歴は持たず、開いている PR の最新分だけがある。手で触らない。\n' \
-    > "$worktree/README.md"
-
-  rm -rf "$worktree/pr-$PR_NUMBER"
-  if [ -n "${1:-}" ]; then
-    for kind in expected actual diff; do
-      [ -d "$1/$kind" ] || continue
-      mkdir -p "$worktree/pr-$PR_NUMBER/$short/$kind"
-      cp "$1/$kind"/*.png "$worktree/pr-$PR_NUMBER/$short/$kind/"
-    done
-  fi
-  # 閉じた PR の分は消す
-  for other in "$worktree"/pr-*; do
-    [ -d "$other" ] || continue
-    number="${other##*/pr-}"
-    [ "$number" = "$PR_NUMBER" ] && continue
-    state="$(gh pr view "$number" --repo "$REPO" --json state -q .state 2>/dev/null || echo UNKNOWN)"
-    [ "$state" = "OPEN" ] || rm -rf "$other"
-  done
-
-  git -C "$worktree" add -A
-  tree="$(git -C "$worktree" write-tree)"
-  commit="$(GIT_AUTHOR_NAME='github-actions[bot]' GIT_COMMITTER_NAME='github-actions[bot]' \
-    GIT_AUTHOR_EMAIL='41898282+github-actions[bot]@users.noreply.github.com' \
-    GIT_COMMITTER_EMAIL='41898282+github-actions[bot]@users.noreply.github.com' \
-    git -C "$worktree" commit-tree "$tree" -m "snapshot previews (latest: #$PR_NUMBER at $short)")"
-  git -C "$worktree" push -q --force origin "$commit:refs/heads/$PREVIEW_BRANCH"
-  git worktree remove --force "$worktree"
-}
-
 body="$(mktemp)"
 
 if [ -z "$changed" ] && [ -z "$missing" ]; then
@@ -99,14 +56,14 @@ if [ -z "$changed" ] && [ -z "$missing" ]; then
   if [ -n "$(existing_comment_id)" ]; then
     printf '%s\n## Snapshot tests\n\n✅ %s に見た目の差分はありません。\n' "$MARKER" "$short" > "$body"
     post_comment "$body"
-    sync_previews ""
+    scripts/snapshot-previews.sh remove "$PR_NUMBER"
   else
     echo "no differences and no previous report; nothing to post"
   fi
   exit 0
 fi
 
-sync_previews "$OUT"
+scripts/snapshot-previews.sh put "$PR_NUMBER" "$short" "$OUT"
 
 # 同じ URL だと GitHub の画像プロキシがキャッシュするので、commit ごとのディレクトリで URL を変える
 raw="https://raw.githubusercontent.com/$REPO/$PREVIEW_BRANCH/pr-$PR_NUMBER/$short"

@@ -86,6 +86,10 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+    # snapshot-previews は force push で置き換えるので、同時に走る他 PR のレポートと直列にする
+    concurrency:
+      group: snapshot-previews
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
