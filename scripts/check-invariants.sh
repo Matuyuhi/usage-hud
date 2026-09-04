@@ -50,11 +50,13 @@ else
   ok "no DEVELOPMENT_TEAM in $PBX"
 fi
 
+# app / widget / tests の 3 ターゲット × Debug / Release。
+# テストバンドルはバージョン設定を持たない(上の 4 個の数え上げに混ぜない)が、署名は同じく ad-hoc
 identities="$(grep -c '"CODE_SIGN_IDENTITY\[sdk=macosx\*\]" = "-";' "$PBX" || true)"
-if [ "$identities" -eq 4 ]; then
-  ok "CODE_SIGN_IDENTITY is ad-hoc (\"-\") in all 4 build configurations"
+if [ "$identities" -eq 6 ]; then
+  ok "CODE_SIGN_IDENTITY is ad-hoc (\"-\") in all 6 build configurations (app, widget, tests)"
 else
-  ng "expected 4 ad-hoc CODE_SIGN_IDENTITY entries in $PBX, found $identities"
+  ng "expected 6 ad-hoc CODE_SIGN_IDENTITY entries in $PBX, found $identities"
 fi
 
 # 本体は sandbox OFF（外部 CLI と Keychain を叩く）、extension は sandbox ON（OFF だと pluginkit に登録されない）

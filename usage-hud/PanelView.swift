@@ -4,10 +4,26 @@ import ServiceManagement
 struct PanelView: View {
     @ObservedObject var store: UsageStore
     var requestResize: () -> Void
-    @State private var expanded: Set<String> = []
+    @State private var expanded: Set<String>
+    /// 素材(ultraThinMaterial)はウィンドウの裏側が無いと描けないので、
+    /// スナップショットテストでは不透明なウィンドウ背景色に差し替える
+    private let flatBackground: Bool
 
     /// System セクションの展開キー。サービスは rawValue を使うので、被らない固定文字列にする
-    private let systemKey = "system"
+    static let systemKey = "system"
+
+    /// - Parameters:
+    ///   - expanded: 最初から開いておくセクション(サービスの rawValue か `systemKey`)。テスト用
+    ///   - flatBackground: 素材の代わりに不透明な背景で描く。テスト用
+    init(
+        store: UsageStore, expanded: Set<String> = [], flatBackground: Bool = false,
+        requestResize: @escaping () -> Void
+    ) {
+        self.store = store
+        self.flatBackground = flatBackground
+        self.requestResize = requestResize
+        _expanded = State(initialValue: expanded)
+    }
 
     /// 行間は Grid 全体で共通なので、セクションの見出し側に上余白を足して区切りを作る
     private let sectionGap: CGFloat = 8
@@ -35,11 +51,17 @@ struct PanelView: View {
         }
         .padding(16)
         .frame(width: DesignTokens.panelWidth)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: DesignTokens.panelCornerRadius))
+        .background(panelBackground, in: RoundedRectangle(cornerRadius: DesignTokens.panelCornerRadius))
         .overlay(
             RoundedRectangle(cornerRadius: DesignTokens.panelCornerRadius)
                 .strokeBorder(.separator, lineWidth: 1)
         )
+    }
+
+    private var panelBackground: AnyShapeStyle {
+        flatBackground
+            ? AnyShapeStyle(Color(nsColor: .windowBackgroundColor))
+            : AnyShapeStyle(.ultraThinMaterial)
     }
 
     private func toggle(_ key: String) {
@@ -48,9 +70,9 @@ struct PanelView: View {
         } else {
             expanded.insert(key)
         }
-        if key == systemKey {
+        if key == Self.systemKey {
             // 上位プロセスは開いている間だけ取る(閉じれば ps の起動も止まる)
-            store.setSystemDetailExpanded(expanded.contains(systemKey))
+            store.setSystemDetailExpanded(expanded.contains(Self.systemKey))
         }
         resizeAfterLayout()
     }
@@ -110,14 +132,14 @@ struct PanelView: View {
     private var systemSection: some View {
         let system = store.system
         let details = system.map { systemDetails($0) } ?? []
-        let isExpanded = expanded.contains(systemKey)
+        let isExpanded = expanded.contains(Self.systemKey)
         SectionHeader(
             name: String(localized: "System"),
             caption: nil,
             isExpanded: isExpanded,
             // 上位プロセスだけでも展開する価値があるので、内訳が空でも開けるようにする
             hasDetails: !details.isEmpty || showsProcesses
-        ) { toggle(systemKey) }
+        ) { toggle(Self.systemKey) }
             .padding(.top, sectionGap)
         if let system {
             let rows = systemMetrics.compactMap { metricRow(for: $0, system: system) }

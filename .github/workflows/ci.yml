@@ -1,9 +1,9 @@
 name: CI
 
-# PR と main への push で回す品質ゲート。テストが無いプロジェクトなので、
-# 「リリースと同じビルドが通る」ことと「壊すと厄介な設計判断が残っている」ことを見る。
+# PR と main への push で回す品質ゲート。
+# 「リリースと同じビルドが通る」「壊すと厄介な設計判断が残っている」「見た目が変わっていない」を見る。
 #
-# サードパーティ Action は供給網最小化のため公式 actions/checkout のみ（bump/release と同じ方針）。
+# サードパーティ Action は供給網最小化のため公式 actions/* のみ（bump/release と同じ方針）。
 
 on:
   pull_request:
@@ -73,3 +73,50 @@ jobs:
           done
 
           echo "app + widget: embedded, universal, ad-hoc signed"
+
+  # パネル / ウィジェットのスナップショットテスト。参照画像は usage-hud-tests/__Snapshots__ にあり、
+  # 見た目を意図して変えた PR では Record snapshots ワークフロー（snapshots.yml）で撮り直してコミットする。
+  # 描画結果は毎回 artifact に上げる（不一致なら diff/ と expected/ も入る）。
+  # 不一致があれば expected / actual / diff を PR のコメントに画像で出す（scripts/snapshot-report.sh）。
+  # そのために画像を snapshot-previews ブランチへ push するので、このジョブだけ書き込み権限を持つ。
+  # fork からの PR はトークンが読み取り専用なのでコメントは出さない（artifact で見る）
+  snapshots:
+    name: Snapshot tests
+    runs-on: macos-26
+    permissions:
+      contents: write
+      pull-requests: write
+    # snapshot-previews は force push で置き換えるので、同時に走る他 PR のレポートと直列にする
+    concurrency:
+      group: snapshot-previews
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Show toolchain
+        run: xcodebuild -version
+
+      - name: Run snapshot tests (en_US / ja_JP)
+        id: test
+        run: scripts/snapshot-test.sh
+
+      - name: Upload rendered snapshots
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: snapshots
+          path: build-test/snapshots
+          if-no-files-found: ignore
+
+      - name: Report differences on the PR
+        # テストの成否に関わらず走らせる（緑に戻ったとき、前回のコメントを「差分なし」に更新するため）
+        if: >-
+          always() && github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name == github.repository &&
+          steps.test.outcome != 'skipped'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: scripts/snapshot-report.sh

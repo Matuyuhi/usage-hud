@@ -20,6 +20,11 @@ scripts/check-invariants.sh
 
 # バージョンを上げる（VERSION と xcodeproj を両方。通常は Bump version ワークフロー経由）
 scripts/bump-version.sh patch|minor|major
+
+# スナップショットテスト（パネル / ウィジェットの見た目の回帰テスト。en_US と ja_JP で 2 回走る）
+scripts/snapshot-test.sh                    # usage-hud-tests/__Snapshots__ と比べる
+scripts/snapshot-test.sh --record           # 見た目を意図して変えたら撮り直す
+scripts/snapshot-test.sh --record-missing   # ケースを足したら、無いものだけ撮る
 ```
 
 バージョンの正は `VERSION`。xcodeproj の `MARKETING_VERSION` はそれと一致させ、`CURRENT_PROJECT_VERSION`
@@ -27,12 +32,33 @@ scripts/bump-version.sh patch|minor|major
 上書きするので、ずれると困るのは `scripts/install.sh` で入れたローカルビルドだけ。
 だから手で pbxproj を編集せず `scripts/bump-version.sh` を通し、一致は `check-invariants.sh` が見張る。
 
-テストは無い。CI（`.github/workflows/ci.yml`）は PR で universal Release ビルドと上のチェックを回すだけなので、
-振る舞いの検証は実行して確認する:
+テストはスナップショットテストのみ（`usage-hud-tests/`）。CI（`.github/workflows/ci.yml`）は PR で
+universal Release ビルド・上のチェック・スナップショットテストを回す。データ取得の振る舞いは実行して確認する:
 
 - `~/Library/Application Support/usage-hud/usage.json` に 3 サービスの gauges がエラーなしで入ること
 - `pluginkit -m | grep usage` でウィジェット登録
 - `codesign -dv /Applications/usage-hud.app` → `Signature=adhoc`
+
+### スナップショットテスト（`usage-hud-tests/`）
+
+本体をホストにした XCTest バンドル。`PanelView` と `UsageWidgetView` を `NSHostingView` + `cacheDisplay` で
+2x のビットマップに描き、`usage-hud-tests/__Snapshots__/<name>.<locale>.<appearance>.png` と比べる
+（1 チャンネル 8/255 までの差は許容、違う画素が 50 を超えたら不一致。割合にしないのは縦長の画像で数値 1 つの変化が埋もれるため）。参照画像はリポジトリに入れるので、
+見た目が変わる PR は Files changed で before / after が見える。描画結果は毎回 CI の `snapshots` artifact に上がり、
+不一致があれば `scripts/snapshot-report.sh` が expected / actual / diff を PR のコメントに画像で出す
+（コメントに画像を添付する API は無いので、`snapshot-previews` ブランチに置いて raw URL で参照する。このブランチは履歴を持たず、
+開いている PR の最新分だけを 1 commit に force push する。fork からの PR は権限が無いので artifact のみ）。
+
+- **参照画像は CI のランナーで撮ったものを正とする**。フォント描画の微差で手元とずれるため、
+  撮り直しは Actions の Record snapshots ワークフロー（`snapshots.yml`、対象ブランチで手動実行 → ブランチにコミット）を使う。
+  GITHUB_TOKEN の push は他のワークフローを起動しないので、コミット後の CI は再実行するか次の push で回す
+- 表示言語は起動時に決まるので `-testLanguage` / `-testRegion` で en_US と ja_JP を別プロセスで回す。
+  日時表示のため scheme の Test で `TZ=UTC` を固定し、データは `SampleData` の固定値を使う
+- 描画に必要な入口: `UsageStore(preview:system:processes:enabled:)`（取得もタイマーも動かさない）、
+  `PanelView(store:expanded:flatBackground:requestResize:)`（素材はウィンドウの裏側が無いと描けないので
+  不透明背景に差し替える）、`UsageWidgetView(snapshot:family:)`（環境の `widgetFamily` は書き込めないので引数で受ける。
+  ウィジェットの描画本体を `shared/` に置いているのはこのため。extension はテストのホストになれない）
+- XCTest のホストとして起動されたときは `AppDelegate` が何も始めない（`XCTestSessionIdentifier` を見る）
 
 ## アーキテクチャ
 
@@ -40,7 +66,9 @@ scripts/bump-version.sh patch|minor|major
 
 - `usage-hud/` — 本体アプリ。sandbox OFF・LSUIElement（Dock/メニューバー非表示）。**データ取得はすべて本体が担い**、`SharedStore` で JSON を書き、`WidgetCenter.reloadAllTimelines()` を叩く
 - `usage-hud-widget/` — ウィジェット。sandbox ON（**extension は sandbox 必須**。OFF にすると pluginkit に登録されず、エラーログも出ない）。共有 JSON を読んで表示するだけ
-- `shared/` — 両ターゲットに属する。`UsageSnapshot`（データモデル）と `SharedStore`（JSON の読み書き）
+- `shared/` — 両ターゲットに属する。`UsageSnapshot`（データモデル）、`SharedStore`（JSON の読み書き）、
+  `UsageWidgetView`（ウィジェットの描画本体。本体側のスナップショットテストから描くためここにある）
+- `usage-hud-tests/` — スナップショットテスト（上記）。本体をホストにするので `@testable import usage_hud` で本体の型を使う
 
 データの流れ: `Fetchers.swift`（3 サービス並列取得）→ `UsageStore`（@MainActor、タイマー管理: パネル表示中 120s / 非表示 1800s / システム指標 2s）→ `SharedStore.save()` → ウィジェットの `TimelineProvider` が読む。
 

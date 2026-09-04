@@ -1,0 +1,34 @@
+name: Clean up snapshot previews
+
+# PR が閉じたら（マージ含む）、snapshot-previews ブランチにあるその PR の差分画像を消す。
+# レポート側（scripts/snapshot-report.sh）も走るたびに閉じた PR の分を掃除するが、
+# 次のレポートまで残るので、閉じた時点でも消しておく。
+
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  contents: write
+  pull-requests: read
+
+concurrency:
+  group: snapshot-previews
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    name: Remove the PR's previews
+    runs-on: ubuntu-24.04
+    # fork からの PR はそもそも画像を置いていない（push できない）ので対象外
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Remove pr-<number> from snapshot-previews
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          # ブランチ自体がまだ無ければ何もしない
+          git ls-remote --exit-code --heads origin snapshot-previews > /dev/null 2>&1 || { echo "no previews yet"; exit 0; }
+          scripts/snapshot-previews.sh remove "${{ github.event.pull_request.number }}"
