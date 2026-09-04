@@ -7,7 +7,7 @@
 Copilot / Claude Code / Codex の残り使用量と、CPU・メモリ・バッテリー・ディスク・ネットワークを一枚で見る macOS 常駐アプリ。
 メニューバーにアイコンを増やさず、`⌃⌥U` で好きなときに呼び出せます。
 
-<img src="docs/panel.png" alt="usage-hud panel" width="346">
+<img src="docs/panel.ja.png" alt="usage-hud panel" width="300">
 
 ## インストール
 

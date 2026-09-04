@@ -103,6 +103,14 @@ else
   ok "no OAuth token refresh (401 stays a stale display)"
 fi
 
+# README の画像はスナップショットの参照画像から作る（実機スクショを撮り直さない）。
+# 参照画像を撮り直したら scripts/sync-readme-images.sh で docs/ も追従させる（Record snapshots はこれを自動で呼ぶ）
+if scripts/sync-readme-images.sh --check > /dev/null; then
+  ok "README images match the snapshot references"
+else
+  ng "README images (docs/) differ from usage-hud-tests/__Snapshots__ (run scripts/sync-readme-images.sh)"
+fi
+
 [ "$fail" -eq 0 ] || { echo; echo "invariant check failed"; exit 1; }
 echo
 echo "all invariants hold"

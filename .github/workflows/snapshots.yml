@@ -1,7 +1,7 @@
 name: Record snapshots
 
 # スナップショットテストの参照画像（usage-hud-tests/__Snapshots__）を CI のランナーで撮り直して、
-# 実行したブランチにコミットする。見た目を意図して変えた PR で手動実行する。
+# README の画像（docs/）も作り直し、実行したブランチにコミットする。見た目を意図して変えた PR で手動実行する。
 #
 # ローカル Mac でも scripts/snapshot-test.sh --record で同じことができるが、フォント描画の
 # 微差を避けるため、参照画像は CI と同じランナーイメージで撮ったものを正とする。
@@ -48,10 +48,14 @@ jobs:
             scripts/snapshot-test.sh --record-missing
           fi
 
+      # README の画像も参照画像から作っているので、撮り直したら一緒に更新する
+      - name: Sync the README images
+        run: scripts/sync-readme-images.sh
+
       - name: Commit the reference images
         run: |
           set -eu
-          git add usage-hud-tests/__Snapshots__
+          git add usage-hud-tests/__Snapshots__ docs
           if git diff --cached --quiet; then
             echo "reference images are unchanged"
             exit 0
