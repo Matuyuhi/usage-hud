@@ -46,7 +46,8 @@ universal Release ビルド・上のチェック・スナップショットテ�
 （1 チャンネル 8/255 までの差は許容、違う画素が 50 を超えたら不一致。割合にしないのは縦長の画像で数値 1 つの変化が埋もれるため）。参照画像はリポジトリに入れるので、
 見た目が変わる PR は Files changed で before / after が見える。描画結果は毎回 CI の `snapshots` artifact に上がり、
 不一致があれば `scripts/snapshot-report.sh` が expected / actual / diff を PR のコメントに画像で出す
-（画像は `snapshot-previews` ブランチに push して raw URL で参照する。fork からの PR は権限が無いので artifact のみ）。
+（コメントに画像を添付する API は無いので、`snapshot-previews` ブランチに置いて raw URL で参照する。このブランチは履歴を持たず、
+開いている PR の最新分だけを 1 commit に force push する。fork からの PR は権限が無いので artifact のみ）。
 
 - **参照画像は CI のランナーで撮ったものを正とする**。フォント描画の微差で手元とずれるため、
   撮り直しは Actions の Record snapshots ワークフロー（`snapshots.yml`、対象ブランチで手動実行 → ブランチにコミット）を使う。
