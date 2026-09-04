@@ -72,7 +72,7 @@ final class WidgetSnapshotTests: XCTestCase {
     private static let medium = CGSize(width: 340, height: 160)
 
     private func widget(_ snapshot: UsageSnapshot?, family: WidgetFamily) -> some View {
-        UsageWidgetView(entry: UsageEntry(date: SampleData.fetchedAt, snapshot: snapshot), family: family)
+        UsageWidgetView(snapshot: snapshot, family: family)
             .padding(16)
             .frame(width: family == .systemSmall ? Self.small.width : Self.medium.width,
                    height: Self.small.height)

@@ -59,17 +59,6 @@
 			);
 			target = 82C8BAFF3034364800572140 /* usage-hud-widgetExtension */;
 		};
-		AA00000000000000000000B4 /* Exceptions for "usage-hud-widget" folder in "usage-hud-tests" target */ = {
-			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
-			membershipExceptions = (
-				Assets.xcassets,
-				Info.plist,
-				Localizable.xcstrings,
-				"usage-hud-widget.entitlements",
-				usage_hud_widgetBundle.swift,
-			);
-			target = AA00000000000000000000B1 /* usage-hud-tests */;
-		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -82,7 +71,6 @@
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
 				82C8BB133034364900572140 /* Exceptions for "usage-hud-widget" folder in "usage-hud-widgetExtension" target */,
-				AA00000000000000000000B4 /* Exceptions for "usage-hud-widget" folder in "usage-hud-tests" target */,
 			);
 			path = "usage-hud-widget";
 			sourceTree = "<group>";
@@ -223,7 +211,6 @@
 			);
 			fileSystemSynchronizedGroups = (
 				AA00000000000000000000B3 /* usage-hud-tests */,
-				82C8BB063034364800572140 /* usage-hud-widget */,
 			);
 			name = "usage-hud-tests";
 			packageProductDependencies = (

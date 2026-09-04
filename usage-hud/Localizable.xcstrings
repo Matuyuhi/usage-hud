@@ -191,6 +191,16 @@
         }
       }
     },
+    "Launch usage-hud to see your usage here" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "usage-hud を起動するとここに表示されます"
+          }
+        }
+      }
+    },
     "Loading…" : {
       "localizations" : {
         "ja" : {
