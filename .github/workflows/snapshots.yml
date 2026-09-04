@@ -6,8 +6,11 @@ name: Record snapshots
 # ローカル Mac でも scripts/snapshot-test.sh --record で同じことができるが、フォント描画の
 # 微差を避けるため、参照画像は CI と同じランナーイメージで撮ったものを正とする。
 #
-# 注意: GITHUB_TOKEN による push は他のワークフローを起動しないので、コミット後に
-# PR の CI を回すには空でない push を重ねるか、Actions から再実行する。
+# 注意:
+# - GITHUB_TOKEN による push は他のワークフローを起動しないので、コミット後に
+#   PR の CI を回すには空でない push を重ねるか、Actions から再実行する
+# - workflow_dispatch はデフォルトブランチに存在するワークフローにしか効かない。
+#   このファイル自体を変える PR では、一時的に push トリガーを足して確かめる
 
 on:
   workflow_dispatch:
@@ -17,10 +20,6 @@ on:
         type: choice
         options: [all, missing]
         default: all
-  # TODO(PR #32): 開発中の一時トリガー。workflow_dispatch はデフォルトブランチに無いワークフローには
-  # 効かないため、このブランチでは push で「無いケースだけ」撮る。マージ前に外す
-  push:
-    branches: [claude/ci-preview-snapshot-tests-c0ez5d]
 
 permissions:
   contents: write
