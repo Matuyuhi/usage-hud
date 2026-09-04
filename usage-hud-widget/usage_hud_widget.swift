@@ -23,9 +23,20 @@ struct Provider: TimelineProvider {
     }
 }
 
-struct UsageWidgetView: View {
+/// WidgetKit 上ではサイズを環境から受け取る。環境の widgetFamily は書き込めないため、
+/// 描画本体(UsageWidgetView)は family を引数で受け、スナップショットテストから直接指定できるようにしている
+struct UsageWidgetEntryView: View {
     @Environment(\.widgetFamily) private var family
     var entry: UsageEntry
+
+    var body: some View {
+        UsageWidgetView(entry: entry, family: family)
+    }
+}
+
+struct UsageWidgetView: View {
+    var entry: UsageEntry
+    var family: WidgetFamily
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -138,7 +149,7 @@ struct usage_hud_widget: Widget {
 
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: Provider()) { entry in
-            UsageWidgetView(entry: entry)
+            UsageWidgetEntryView(entry: entry)
         }
         .configurationDisplayName("Usage HUD")
         .description("Remaining usage for Copilot / Claude Code / Codex")

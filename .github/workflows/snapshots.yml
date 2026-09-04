@@ -1,0 +1,54 @@
+name: Record snapshots
+
+# スナップショットテストの参照画像（usage-hud-tests/__Snapshots__）を CI のランナーで撮り直して、
+# 実行したブランチにコミットする。見た目を意図して変えた PR で手動実行する。
+#
+# ローカル Mac でも scripts/snapshot-test.sh --record で同じことができるが、フォント描画の
+# 微差を避けるため、参照画像は CI と同じランナーイメージで撮ったものを正とする。
+#
+# 注意: GITHUB_TOKEN による push は他のワークフローを起動しないので、コミット後に
+# PR の CI を回すには空でない push を重ねるか、Actions から再実行する。
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: snapshots-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  record:
+    name: Record and commit
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Show toolchain
+        run: xcodebuild -version
+
+      - name: Record snapshots (en_US / ja_JP)
+        run: scripts/snapshot-test.sh --record
+
+      - name: Commit the reference images
+        run: |
+          set -eu
+          git add usage-hud-tests/__Snapshots__
+          if git diff --cached --quiet; then
+            echo "reference images are unchanged"
+            exit 0
+          fi
+          git -c user.name='github-actions[bot]' \
+              -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+              commit -m "test: record snapshot references on ${GITHUB_REF_NAME}"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
+
+      - name: Upload rendered snapshots
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: snapshots
+          path: build-test/snapshots
+          if-no-files-found: ignore

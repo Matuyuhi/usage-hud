@@ -45,6 +45,20 @@ final class UsageStore: ObservableObject {
     private var processMetrics: Set<DisplayItem> { enabled.intersection([.cpu, .memory]) }
     private var needsProcesses: Bool { !processMetrics.isEmpty }
 
+    init() {}
+
+    /// テスト / プレビュー用。取得もタイマーも動かさず、渡された値をそのまま表示する。
+    /// 共有 JSON にも書かないので、実機の usage.json を汚さない
+    init(
+        preview snapshot: UsageSnapshot?, system: SystemSample?, processes: ProcessSample? = nil,
+        enabled: Set<DisplayItem>
+    ) {
+        self.snapshot = snapshot
+        self.system = system
+        self.processes = processes
+        self.enabled = enabled
+    }
+
     func start() {
         snapshot = SharedStore.load()
         refresh()

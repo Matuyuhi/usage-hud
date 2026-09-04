@@ -20,6 +20,13 @@
 			remoteGlobalIDString = 82C8BAFF3034364800572140;
 			remoteInfo = "usage-hud-widgetExtension";
 		};
+		AA00000000000000000000B5 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 82C8BAE43034361100572140 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 82C8BAEB3034361100572140;
+			remoteInfo = "usage-hud";
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -41,6 +48,7 @@
 		82C8BB003034364800572140 /* usage-hud-widgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "usage-hud-widgetExtension.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
 		82C8BB023034364800572140 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
 		82C8BB043034364800572140 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
+		AA00000000000000000000B2 /* usage-hud-tests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "usage-hud-tests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -50,6 +58,17 @@
 				Info.plist,
 			);
 			target = 82C8BAFF3034364800572140 /* usage-hud-widgetExtension */;
+		};
+		AA00000000000000000000B4 /* Exceptions for "usage-hud-widget" folder in "usage-hud-tests" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Assets.xcassets,
+				Info.plist,
+				Localizable.xcstrings,
+				"usage-hud-widget.entitlements",
+				usage_hud_widgetBundle.swift,
+			);
+			target = AA00000000000000000000B1 /* usage-hud-tests */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
@@ -63,6 +82,7 @@
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
 				82C8BB133034364900572140 /* Exceptions for "usage-hud-widget" folder in "usage-hud-widgetExtension" target */,
+				AA00000000000000000000B4 /* Exceptions for "usage-hud-widget" folder in "usage-hud-tests" target */,
 			);
 			path = "usage-hud-widget";
 			sourceTree = "<group>";
@@ -70,6 +90,11 @@
 		AA00000000000000000000A1 /* shared */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = shared;
+			sourceTree = "<group>";
+		};
+		AA00000000000000000000B3 /* usage-hud-tests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = "usage-hud-tests";
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -91,6 +116,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		AA00000000000000000000B8 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -100,6 +132,7 @@
 				82C8BAEE3034361100572140 /* usage-hud */,
 				82C8BB063034364800572140 /* usage-hud-widget */,
 				AA00000000000000000000A1 /* shared */,
+				AA00000000000000000000B3 /* usage-hud-tests */,
 				82C8BB013034364800572140 /* Frameworks */,
 				82C8BAED3034361100572140 /* Products */,
 			);
@@ -110,6 +143,7 @@
 			children = (
 				82C8BAEC3034361100572140 /* usage-hud.app */,
 				82C8BB003034364800572140 /* usage-hud-widgetExtension.appex */,
+				AA00000000000000000000B2 /* usage-hud-tests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -174,6 +208,30 @@
 			productReference = 82C8BB003034364800572140 /* usage-hud-widgetExtension.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
+		AA00000000000000000000B1 /* usage-hud-tests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AA00000000000000000000C1 /* Build configuration list for PBXNativeTarget "usage-hud-tests" */;
+			buildPhases = (
+				AA00000000000000000000B7 /* Sources */,
+				AA00000000000000000000B8 /* Frameworks */,
+				AA00000000000000000000B9 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				AA00000000000000000000B6 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				AA00000000000000000000B3 /* usage-hud-tests */,
+				82C8BB063034364800572140 /* usage-hud-widget */,
+			);
+			name = "usage-hud-tests";
+			packageProductDependencies = (
+			);
+			productName = "usage-hud-tests";
+			productReference = AA00000000000000000000B2 /* usage-hud-tests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -189,6 +247,10 @@
 					};
 					82C8BAFF3034364800572140 = {
 						CreatedOnToolsVersion = 26.5;
+					};
+					AA00000000000000000000B1 = {
+						CreatedOnToolsVersion = 26.5;
+						TestTargetID = 82C8BAEB3034361100572140;
 					};
 				};
 			};
@@ -209,6 +271,7 @@
 			targets = (
 				82C8BAEB3034361100572140 /* usage-hud */,
 				82C8BAFF3034364800572140 /* usage-hud-widgetExtension */,
+				AA00000000000000000000B1 /* usage-hud-tests */,
 			);
 		};
 /* End PBXProject section */
@@ -222,6 +285,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		82C8BAFE3034364800572140 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AA00000000000000000000B9 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -245,6 +315,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		AA00000000000000000000B7 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -252,6 +329,11 @@
 			isa = PBXTargetDependency;
 			target = 82C8BAFF3034364800572140 /* usage-hud-widgetExtension */;
 			targetProxy = 82C8BB103034364900572140 /* PBXContainerItemProxy */;
+		};
+		AA00000000000000000000B6 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 82C8BAEB3034361100572140 /* usage-hud */;
+			targetProxy = AA00000000000000000000B5 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -500,6 +582,52 @@
 			};
 			name = Release;
 		};
+		AA00000000000000000000C2 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.5;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.matuyuhi.usage-hud.tests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 6.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/usage-hud.app/Contents/MacOS/usage-hud";
+			};
+			name = Debug;
+		};
+		AA00000000000000000000C3 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.5;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.matuyuhi.usage-hud.tests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 6.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/usage-hud.app/Contents/MacOS/usage-hud";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -526,6 +654,15 @@
 			buildConfigurations = (
 				82C8BB153034364900572140 /* Debug */,
 				82C8BB163034364900572140 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		AA00000000000000000000C1 /* Build configuration list for PBXNativeTarget "usage-hud-tests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AA00000000000000000000C2 /* Debug */,
+				AA00000000000000000000C3 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

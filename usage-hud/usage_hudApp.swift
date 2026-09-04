@@ -33,6 +33,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var needsFitAfterMenu = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // XCTest のホストとして起動されたときは何も始めない。
+        // 取得(外部 CLI の起動・HTTP)やホットキー登録が走ると、テストの描画と無関係な副作用になる
+        if ProcessInfo.processInfo.environment["XCTestSessionIdentifier"] != nil { return }
         store.start()
         // 行数の変化で必要サイズが変わるため、snapshot とシステム指標の更新のたびに合わせ直す。
         // system は初回サンプルで行が増えるので、snapshot が変わらない経路でも見る必要がある
