@@ -48,7 +48,7 @@ enum SampleData {
     }
 
     static let system = SystemSample(
-        cpuPercent: 47.5,
+        cpuPercent: 23.5,
         memUsedBytes: 19_542_000_000,
         memTotalBytes: 34_359_738_368,
         sampledAt: fetchedAt,

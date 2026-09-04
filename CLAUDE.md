@@ -43,7 +43,7 @@ universal Release ビルド・上のチェック・スナップショットテ�
 
 本体をホストにした XCTest バンドル。`PanelView` と `UsageWidgetView` を `NSHostingView` + `cacheDisplay` で
 2x のビットマップに描き、`usage-hud-tests/__Snapshots__/<name>.<locale>.<appearance>.png` と比べる
-（1 チャンネル 8/255 までの差は許容、違う画素が 0.1% を超えたら不一致）。参照画像はリポジトリに入れるので、
+（1 チャンネル 8/255 までの差は許容、違う画素が 50 を超えたら不一致。割合にしないのは縦長の画像で数値 1 つの変化が埋もれるため）。参照画像はリポジトリに入れるので、
 見た目が変わる PR は Files changed で before / after が見える。描画結果は毎回 CI の `snapshots` artifact に上がり、
 不一致があれば `scripts/snapshot-report.sh` が expected / actual / diff を PR のコメントに画像で出す
 （画像は `snapshot-previews` ブランチに push して raw URL で参照する。fork からの PR は権限が無いので artifact のみ）。

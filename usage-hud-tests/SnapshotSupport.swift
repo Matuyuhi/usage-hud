@@ -75,17 +75,16 @@ struct SnapshotPixels {
 enum SnapshotComparison {
     /// 1 チャンネルあたりこの差までは同じ画素とみなす(アンチエイリアスの揺れを吸収する)
     static let channelTolerance = 8
-    /// 違う画素がこの割合を超えたら不一致
-    static let maxDifferentFraction = 0.001
+    /// 違う画素がこの数を超えたら不一致。割合にすると縦長の画像で文字 1 語ぶんの変化が埋もれる
+    /// (展開したパネルは 117 万画素あり、数値 1 つの変化は 1,000 画素程度)ので絶対数で見る
+    static let maxDifferentPixels = 50
 
     struct Result {
         let differentPixels: Int
         let totalPixels: Int
         let diff: SnapshotPixels?
 
-        var isMatch: Bool {
-            Double(differentPixels) / Double(max(totalPixels, 1)) <= SnapshotComparison.maxDifferentFraction
-        }
+        var isMatch: Bool { differentPixels <= SnapshotComparison.maxDifferentPixels }
     }
 
     /// サイズが違えば即不一致。同じなら画素ごとに比べ、違う画素を赤く塗った diff 画像を返す
@@ -210,6 +209,8 @@ extension XCTestCase {
         }
         let expected = SnapshotPixels(image)
         let result = SnapshotComparison.compare(actual: actual, expected: expected)
+        // 一致したときも差の数を残す。ランナーの世代差でどれだけ揺れるかを閾値の根拠にする
+        print("snapshot '\(fileName)': \(result.differentPixels) differing pixels (limit \(SnapshotComparison.maxDifferentPixels))")
         guard !result.isMatch else { return }
 
         let expectedURL = Self.outputDirectory.appendingPathComponent("expected").appendingPathComponent(fileName)
