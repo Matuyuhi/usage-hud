@@ -15,3 +15,9 @@
 **Learning:** When reading output from external commands (like `ps` via `ProcessSession`) which return hundreds of lines, splitting the buffer and mapping it to new `String` instances (`.map(String.init)`) causes hundreds of unnecessary heap allocations per tick.
 
 **Action:** For string splitting operations in tight polling loops, return and process `[Substring]` arrays. `Substring` acts as a view on the original buffer's memory, avoiding allocations. Convert to `String` only at the exact boundaries where external libraries or JSON serialization strictly requires it.
+
+## 2026-02-20 - Avoid redundant Mach traps in 2s loop
+
+**Learning:** `mach_host_self()` and `host_page_size()` perform kernel traps which add measurable overhead when called repeatedly in tight timers (like the 2s `SystemSampler` loop). The returned values (host port and page size) are static for the lifetime of the process.
+
+**Action:** Cache the result of `mach_host_self()` and `host_page_size()` during initialization and reuse them to eliminate redundant trap calls in system monitoring tools. Ensure proper cleanup with `mach_port_deallocate()` in `deinit`.
