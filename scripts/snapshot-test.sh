@@ -1,7 +1,8 @@
 #!/bin/sh
 # スナップショットテスト(パネル / ウィジェットの見た目の回帰テスト)。CI の Snapshot tests ジョブもこれを呼ぶ。
-#   scripts/snapshot-test.sh            # usage-hud-tests/__Snapshots__ の参照画像と比べる
-#   scripts/snapshot-test.sh --record   # 参照画像を撮り直す(見た目を意図して変えたとき)
+#   scripts/snapshot-test.sh                    # usage-hud-tests/__Snapshots__ の参照画像と比べる
+#   scripts/snapshot-test.sh --record           # 参照画像を全部撮り直す(見た目を意図して変えたとき)
+#   scripts/snapshot-test.sh --record-missing   # 参照画像が無いケースだけ撮る(ケースを足したとき)。あるものは比べる
 #
 # 表示言語はプロセス起動時に決まるので、en_US と ja_JP で 2 回走らせる。
 # 描画結果は build-test/snapshots/actual/ に毎回書き、不一致なら diff/ と expected/ も書く
@@ -12,8 +13,9 @@ cd "$(dirname "$0")/.."
 RECORD=0
 case "${1:-}" in
   --record) RECORD=1 ;;
+  --record-missing) RECORD=missing ;;
   "") ;;
-  *) echo "usage: $0 [--record]" >&2; exit 2 ;;
+  *) echo "usage: $0 [--record|--record-missing]" >&2; exit 2 ;;
 esac
 
 OUT="${SNAPSHOT_OUTPUT_DIR:-$PWD/build-test/snapshots}"
@@ -34,7 +36,7 @@ for locale in en_US ja_JP; do
     || status=1
 done
 
-if [ "$RECORD" -eq 1 ]; then
+if [ "$RECORD" != 0 ]; then
   echo "recorded into usage-hud-tests/__Snapshots__:"
   ls usage-hud-tests/__Snapshots__
 fi

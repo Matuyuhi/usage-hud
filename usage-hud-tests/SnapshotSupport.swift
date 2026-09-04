@@ -10,7 +10,8 @@ import XCTest
 // テスト対象のビュー側で不透明背景に差し替えている。
 //
 // 環境変数(xcodebuild からは TEST_RUNNER_ を前置して渡す):
-//   SNAPSHOT_RECORD=1      参照画像を書き直す(比較しない)
+//   SNAPSHOT_RECORD=1        参照画像を書き直す(比較しない)
+//   SNAPSHOT_RECORD=missing  参照画像が無いケースだけ書き、あるケースは比較する
 //   SNAPSHOT_OUTPUT_DIR    描画結果の出力先。actual/ に毎回、diff/ と expected/ は不一致のときだけ書く
 
 /// ランナーのディスプレイが 1x でも同じピクセル数になるよう、倍率を 2x に固定する
@@ -147,8 +148,18 @@ enum SnapshotRenderer {
 }
 
 extension XCTestCase {
-    private static var isRecording: Bool {
-        ["1", "true", "YES"].contains(ProcessInfo.processInfo.environment["SNAPSHOT_RECORD"] ?? "")
+    private enum RecordMode {
+        case off
+        case all
+        case missing
+    }
+
+    private static var recordMode: RecordMode {
+        switch ProcessInfo.processInfo.environment["SNAPSHOT_RECORD"] ?? "" {
+        case "1", "true", "YES", "all": .all
+        case "missing": .missing
+        default: .off
+        }
     }
 
     private static var referenceDirectory: URL {
@@ -176,7 +187,8 @@ extension XCTestCase {
 
         write(actual, to: Self.outputDirectory.appendingPathComponent("actual").appendingPathComponent(fileName))
 
-        if Self.isRecording {
+        let hasReference = FileManager.default.fileExists(atPath: referenceURL.path)
+        if Self.recordMode == .all || (Self.recordMode == .missing && !hasReference) {
             write(actual, to: referenceURL)
             print("snapshot recorded: \(referenceURL.path)")
             return

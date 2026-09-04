@@ -11,6 +11,16 @@ name: Record snapshots
 
 on:
   workflow_dispatch:
+    inputs:
+      mode:
+        description: "all: 全部撮り直す / missing: 参照画像が無いケースだけ撮る"
+        type: choice
+        options: [all, missing]
+        default: all
+  # TODO(PR #32): 開発中の一時トリガー。workflow_dispatch はデフォルトブランチに無いワークフローには
+  # 効かないため、このブランチでは push で「無いケースだけ」撮る。マージ前に外す
+  push:
+    branches: [claude/ci-preview-snapshot-tests-c0ez5d]
 
 permissions:
   contents: write
@@ -30,7 +40,14 @@ jobs:
         run: xcodebuild -version
 
       - name: Record snapshots (en_US / ja_JP)
-        run: scripts/snapshot-test.sh --record
+        env:
+          MODE: ${{ github.event.inputs.mode || 'missing' }}
+        run: |
+          if [ "$MODE" = "all" ]; then
+            scripts/snapshot-test.sh --record
+          else
+            scripts/snapshot-test.sh --record-missing
+          fi
 
       - name: Commit the reference images
         run: |
