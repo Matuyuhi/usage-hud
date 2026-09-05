@@ -76,8 +76,10 @@ final class SystemSampler {
         var count = mach_msg_type_number_t(0)
         var cpuCount = natural_t(0)
         var info: processor_info_array_t?
+        let hostPort = mach_host_self()
         let result = host_processor_info(
-            mach_host_self(), PROCESSOR_CPU_LOAD_INFO, &cpuCount, &info, &count)
+            hostPort, PROCESSOR_CPU_LOAD_INFO, &cpuCount, &info, &count)
+        mach_port_deallocate(mach_task_self_, hostPort)
         guard result == KERN_SUCCESS, let info else { return 0 }
         defer {
             vm_deallocate(mach_task_self_, vm_address_t(bitPattern: info),
@@ -106,18 +108,21 @@ final class SystemSampler {
 
     // アクティビティモニタの「使用済みメモリ」に相当する内訳: active + wired + compressed
     private func memoryBreakdown() -> (active: UInt64, wired: UInt64, compressed: UInt64) {
+        let hostPort = mach_host_self()
+        defer { mach_port_deallocate(mach_task_self_, hostPort) }
+
         var stats = vm_statistics64()
         var count = mach_msg_type_number_t(
             MemoryLayout<vm_statistics64_data_t>.size / MemoryLayout<integer_t>.size)
         let result = withUnsafeMutablePointer(to: &stats) {
             $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
-                host_statistics64(mach_host_self(), HOST_VM_INFO64, $0, &count)
+                host_statistics64(hostPort, HOST_VM_INFO64, $0, &count)
             }
         }
         guard result == KERN_SUCCESS else { return (0, 0, 0) }
         // グローバル変数の vm_kernel_page_size は並行アクセス安全でないため関数版で引く
         var kernelPageSize: vm_size_t = 0
-        guard host_page_size(mach_host_self(), &kernelPageSize) == KERN_SUCCESS else {
+        guard host_page_size(hostPort, &kernelPageSize) == KERN_SUCCESS else {
             return (0, 0, 0)
         }
         let pageSize = UInt64(kernelPageSize)
