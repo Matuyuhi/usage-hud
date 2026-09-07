@@ -15,3 +15,9 @@
 **Learning:** When reading output from external commands (like `ps` via `ProcessSession`) which return hundreds of lines, splitting the buffer and mapping it to new `String` instances (`.map(String.init)`) causes hundreds of unnecessary heap allocations per tick.
 
 **Action:** For string splitting operations in tight polling loops, return and process `[Substring]` arrays. `Substring` acts as a view on the original buffer's memory, avoiding allocations. Convert to `String` only at the exact boundaries where external libraries or JSON serialization strictly requires it.
+
+## 2024-11-20 - Avoid repeated syscalls and resource leaks in polling loops
+
+**Learning:** In periodic UI updates (like fetching CPU and Memory stats every 2 seconds via `SystemSampler`), repeatedly calling `mach_host_self()` can cause port exhaustion if the Mach port is not deallocated properly. Moreover, constantly querying `host_page_size()` is redundant since the kernel page size doesn't change during the application lifecycle.
+
+**Action:** Cache kernel constants like `host_page_size` and Mach ports initialized via `mach_host_self()` during the object initialization phase. Always ensure proper cleanup of cached Mach ports in `deinit` using `mach_port_deallocate(mach_task_self_, port)` to prevent resource leaks.
