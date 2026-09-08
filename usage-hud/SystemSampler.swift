@@ -3,12 +3,27 @@ import Darwin
 import IOKit.ps
 
 final class SystemSampler {
+    // ⚡ Bolt: Cache Mach port and page size to prevent per-tick system calls and port exhaustion
+    private let hostPort: mach_port_t
+    private let pageSize: UInt64
+
     private var previousBusy: UInt64 = 0
     private var previousTotal: UInt64 = 0
     private var previousNetwork: (inBytes: UInt64, outBytes: UInt64, at: Date)?
     // ゆっくりしか動かない指標(バッテリー/ディスク)は 2 秒ごとに引き直さず、前回値を使い回す
     private var slowCache: SlowCache?
     private static let slowInterval: TimeInterval = 30
+
+    init() {
+        hostPort = mach_host_self()
+        var size: vm_size_t = 0
+        host_page_size(hostPort, &size)
+        pageSize = UInt64(size)
+    }
+
+    deinit {
+        mach_port_deallocate(mach_task_self_, hostPort)
+    }
 
     /// バッテリーの無い Mac では battery が常に nil になるため、値の有無ではなく
     /// 「どの項目を実際に引いたか」でキャッシュのヒットを判定する
@@ -77,7 +92,7 @@ final class SystemSampler {
         var cpuCount = natural_t(0)
         var info: processor_info_array_t?
         let result = host_processor_info(
-            mach_host_self(), PROCESSOR_CPU_LOAD_INFO, &cpuCount, &info, &count)
+            hostPort, PROCESSOR_CPU_LOAD_INFO, &cpuCount, &info, &count)
         guard result == KERN_SUCCESS, let info else { return 0 }
         defer {
             vm_deallocate(mach_task_self_, vm_address_t(bitPattern: info),
@@ -111,16 +126,10 @@ final class SystemSampler {
             MemoryLayout<vm_statistics64_data_t>.size / MemoryLayout<integer_t>.size)
         let result = withUnsafeMutablePointer(to: &stats) {
             $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
-                host_statistics64(mach_host_self(), HOST_VM_INFO64, $0, &count)
+                host_statistics64(hostPort, HOST_VM_INFO64, $0, &count)
             }
         }
         guard result == KERN_SUCCESS else { return (0, 0, 0) }
-        // グローバル変数の vm_kernel_page_size は並行アクセス安全でないため関数版で引く
-        var kernelPageSize: vm_size_t = 0
-        guard host_page_size(mach_host_self(), &kernelPageSize) == KERN_SUCCESS else {
-            return (0, 0, 0)
-        }
-        let pageSize = UInt64(kernelPageSize)
         return (UInt64(stats.active_count) * pageSize,
                 UInt64(stats.wire_count) * pageSize,
                 UInt64(stats.compressor_page_count) * pageSize)

@@ -15,3 +15,7 @@
 **Learning:** When reading output from external commands (like `ps` via `ProcessSession`) which return hundreds of lines, splitting the buffer and mapping it to new `String` instances (`.map(String.init)`) causes hundreds of unnecessary heap allocations per tick.
 
 **Action:** For string splitting operations in tight polling loops, return and process `[Substring]` arrays. `Substring` acts as a view on the original buffer's memory, avoiding allocations. Convert to `String` only at the exact boundaries where external libraries or JSON serialization strictly requires it.
+
+## 2024-09-08 - Cache Mach Port and Page Size in Swift Polling Loops
+**Learning:** Calling `mach_host_self()` initializes a Mach port that leaks unless explicitly deallocated via `mach_port_deallocate()`. Moreover, repeatedly calling `mach_host_self()` and `host_page_size()` inside a fast polling loop incurs unnecessary system call overhead and can lead to port exhaustion over time.
+**Action:** In long-running polling services (like `SystemSampler`), cache kernel constants (like `host_page_size`) and Mach ports during initialization, and ensure ports are properly cleaned up in the `deinit` phase.
