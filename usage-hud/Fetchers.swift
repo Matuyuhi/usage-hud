@@ -327,13 +327,41 @@ nonisolated final class ProcessSession {
     init(command: String, arguments: [String], timeout: TimeInterval, prependCustomPaths: Bool = false) throws {
         self.command = command
         self.deadline = Date().addingTimeInterval(timeout)
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = [command] + arguments
+
         var environment = ProcessInfo.processInfo.environment
-        let path = environment["PATH"] ?? "/usr/bin:/bin"
-        environment["PATH"] = prependCustomPaths
-            ? "\(NSHomeDirectory())/.local/bin:/opt/homebrew/bin:/usr/local/bin:" + path
-            : "/usr/bin:/bin:/usr/sbin:/sbin"
+        if prependCustomPaths {
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+            process.arguments = [command] + arguments
+            let path = environment["PATH"] ?? "/usr/bin:/bin"
+            environment["PATH"] = "\(NSHomeDirectory())/.local/bin:/opt/homebrew/bin:/usr/local/bin:" + path
+        } else {
+            // 安全な検索パスから直接絶対パスを解決する(env に頼るとベースの PATH が汚染されていた場合に CWE-426 となる)
+            let searchPaths = ["/usr/bin", "/bin", "/usr/sbin", "/sbin"]
+            var resolvedURL: URL?
+
+            if command.hasPrefix("/") {
+                if FileManager.default.isExecutableFile(atPath: command) {
+                    resolvedURL = URL(fileURLWithPath: command)
+                }
+            } else {
+                for path in searchPaths {
+                    let url = URL(fileURLWithPath: path).appendingPathComponent(command)
+                    if FileManager.default.isExecutableFile(atPath: url.path) {
+                        resolvedURL = url
+                        break
+                    }
+                }
+            }
+
+            guard let executableURL = resolvedURL else {
+                throw FetchError.message(String(localized: "Command not found in secure paths: \(command)"))
+            }
+            process.executableURL = executableURL
+            // absolute path で実行する場合、Process の arguments にコマンド名は含めない
+            process.arguments = arguments
+            environment["PATH"] = searchPaths.joined(separator: ":")
+        }
+
         process.environment = environment
         process.standardOutput = stdoutPipe
         process.standardInput = stdinPipe
