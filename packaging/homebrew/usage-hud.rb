@@ -16,7 +16,7 @@ cask "usage-hud" do
 
   # ad-hoc 署名のため、quarantine が付いたままだと Gatekeeper に「壊れている」と判定される
   postflight_steps do
-    run "/usr/bin/xattr",
+    run "xattr",
         args: ["-dr", "com.apple.quarantine", "{{appdir}}/usage-hud.app"]
   end
 
