@@ -144,7 +144,9 @@ nonisolated enum AppNames {
 
     static func resolve(executablePath path: String) -> Resolved {
         guard let bundlePath = outermostAppBundle(in: path) else {
-            return Resolved(key: path, name: (path as NSString).lastPathComponent)
+            // Optimize: avoid NSString bridging in polling loop
+            let name = path.lastIndex(of: "/").map { String(path[path.index(after: $0)...]) } ?? path
+            return Resolved(key: path, name: name)
         }
         return Resolved(key: bundlePath, name: cache.name(ofBundle: bundlePath))
     }
@@ -185,7 +187,9 @@ private nonisolated final class BundleNameCache: @unchecked Sendable {
     /// 表示名は CFBundleDisplayName → CFBundleName の順。どちらも無ければバンドル名から .app を落とす。
     /// localizedInfoDictionary を先に見るのは、日本語名を持つアプリ(システム設定など)に合わせるため
     private static func read(_ bundlePath: String) -> String {
-        let fallback = ((bundlePath as NSString).lastPathComponent as NSString).deletingPathExtension
+        // Optimize: avoid NSString bridging in polling loop
+        let lastComponent = bundlePath.lastIndex(of: "/").map { String(bundlePath[bundlePath.index(after: $0)...]) } ?? bundlePath
+        let fallback = lastComponent.lastIndex(of: ".").map { String(lastComponent[..<$0]) } ?? lastComponent
         guard let bundle = Bundle(path: bundlePath) else { return fallback }
         for key in ["CFBundleDisplayName", "CFBundleName"] {
             let value: Any? = bundle.localizedInfoDictionary?[key] ?? bundle.infoDictionary?[key]

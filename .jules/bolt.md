@@ -21,3 +21,9 @@
 **Learning:** In Swift polling loops on macOS, repeatedly calling system APIs like `mach_host_self()` and `host_page_size()` (e.g., inside `cpuPercent()` or `memoryBreakdown()`) every tick introduces unnecessary overhead and can cause resource leaks (port exhaustion) if the port is not correctly managed/deallocated.
 
 **Action:** Cache these constants and initialized Mach ports during class initialization. Store the port in a property, re-use it during polling loops, and ensure proper cleanup using `mach_port_deallocate()` in the `deinit` block.
+
+## 2024-07-29 - Avoid NSString bridging for string manipulations in polling loops
+
+**Learning:** In macOS Swift development, using Objective-C `NSString` bridging methods like `lastPathComponent` or `deletingPathExtension` on a Swift `String` causes unnecessary memory allocations and bridging overhead. When this is done inside a tight polling loop (such as parsing paths for hundreds of background processes every 5 seconds), it results in significant performance degradation.
+
+**Action:** Replace `NSString` bridging methods with native Swift `String` operations, such as using `lastIndex(of:)` and slicing with substrings (`[..<index]`), to prevent unnecessary memory allocations and bridging overhead.
