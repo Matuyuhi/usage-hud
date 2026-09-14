@@ -327,13 +327,38 @@ nonisolated final class ProcessSession {
     init(command: String, arguments: [String], timeout: TimeInterval, prependCustomPaths: Bool = false) throws {
         self.command = command
         self.deadline = Date().addingTimeInterval(timeout)
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = [command] + arguments
-        var environment = ProcessInfo.processInfo.environment
-        let path = environment["PATH"] ?? "/usr/bin:/bin"
-        environment["PATH"] = prependCustomPaths
-            ? "\(NSHomeDirectory())/.local/bin:/opt/homebrew/bin:/usr/local/bin:" + path
+
+        let pathEnv = ProcessInfo.processInfo.environment["PATH"] ?? "/usr/bin:/bin"
+        let searchPathString = prependCustomPaths
+            ? "\(NSHomeDirectory())/.local/bin:/opt/homebrew/bin:/usr/local/bin:" + pathEnv
             : "/usr/bin:/bin:/usr/sbin:/sbin"
+
+        let searchPaths = searchPathString.split(separator: ":").map(String.init)
+
+        var resolvedExecutableURL: URL?
+        if command.hasPrefix("/") {
+            if FileManager.default.isExecutableFile(atPath: command) {
+                resolvedExecutableURL = URL(fileURLWithPath: command)
+            }
+        } else {
+            for dir in searchPaths {
+                let candidate = dir + "/" + command
+                if FileManager.default.isExecutableFile(atPath: candidate) {
+                    resolvedExecutableURL = URL(fileURLWithPath: candidate)
+                    break
+                }
+            }
+        }
+
+        guard let url = resolvedExecutableURL else {
+            throw FetchError.message("Command not found or not executable: \(command)")
+        }
+
+        process.executableURL = url
+        process.arguments = arguments
+
+        var environment = ProcessInfo.processInfo.environment
+        environment["PATH"] = searchPathString
         process.environment = environment
         process.standardOutput = stdoutPipe
         process.standardInput = stdinPipe
