@@ -327,13 +327,34 @@ nonisolated final class ProcessSession {
     init(command: String, arguments: [String], timeout: TimeInterval, prependCustomPaths: Bool = false) throws {
         self.command = command
         self.deadline = Date().addingTimeInterval(timeout)
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = [command] + arguments
         var environment = ProcessInfo.processInfo.environment
-        let path = environment["PATH"] ?? "/usr/bin:/bin"
-        environment["PATH"] = prependCustomPaths
-            ? "\(NSHomeDirectory())/.local/bin:/opt/homebrew/bin:/usr/local/bin:" + path
+        // 外部の PATH に依存せず、安全な固定リストのみで解決する
+        let safePath = prependCustomPaths
+            ? "\(NSHomeDirectory())/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
             : "/usr/bin:/bin:/usr/sbin:/sbin"
+        environment["PATH"] = safePath
+
+        var resolvedURL: URL? = nil
+        if command.contains("/") {
+            resolvedURL = URL(fileURLWithPath: command)
+        } else {
+            let directories = safePath.components(separatedBy: ":")
+            for dir in directories {
+                if dir.isEmpty { continue }
+                let url = URL(fileURLWithPath: dir).appendingPathComponent(command)
+                if FileManager.default.isExecutableFile(atPath: url.path) {
+                    resolvedURL = url
+                    break
+                }
+            }
+        }
+
+        guard let resolvedURL = resolvedURL else {
+            throw FetchError.message(String(format: String(localized: "Command not found: %@"), command))
+        }
+
+        process.executableURL = resolvedURL
+        process.arguments = arguments
         process.environment = environment
         process.standardOutput = stdoutPipe
         process.standardInput = stdinPipe
