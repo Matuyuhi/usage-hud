@@ -144,7 +144,10 @@ nonisolated enum AppNames {
 
     static func resolve(executablePath path: String) -> Resolved {
         guard let bundlePath = outermostAppBundle(in: path) else {
-            return Resolved(key: path, name: (path as NSString).lastPathComponent)
+            // Drop trailing slashes, then take characters after the last slash
+            let trimmed = path.hasSuffix("/") ? path.dropLast() : Substring(path)
+            let name = trimmed.lastIndex(of: "/").map { String(trimmed[trimmed.index(after: $0)...]) } ?? String(trimmed)
+            return Resolved(key: path, name: name)
         }
         return Resolved(key: bundlePath, name: cache.name(ofBundle: bundlePath))
     }
