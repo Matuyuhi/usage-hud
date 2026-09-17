@@ -327,13 +327,39 @@ nonisolated final class ProcessSession {
     init(command: String, arguments: [String], timeout: TimeInterval, prependCustomPaths: Bool = false) throws {
         self.command = command
         self.deadline = Date().addingTimeInterval(timeout)
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = [command] + arguments
+
         var environment = ProcessInfo.processInfo.environment
-        let path = environment["PATH"] ?? "/usr/bin:/bin"
-        environment["PATH"] = prependCustomPaths
-            ? "\(NSHomeDirectory())/.local/bin:/opt/homebrew/bin:/usr/local/bin:" + path
-            : "/usr/bin:/bin:/usr/sbin:/sbin"
+
+        if prependCustomPaths {
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+            process.arguments = [command] + arguments
+            let path = environment["PATH"] ?? "/usr/bin:/bin"
+            environment["PATH"] = "\(NSHomeDirectory())/.local/bin:/opt/homebrew/bin:/usr/local/bin:" + path
+        } else {
+            // Bypass tainted environment PATH completely for system commands to prevent CWE-426
+            environment["PATH"] = "/usr/bin:/bin:/usr/sbin:/sbin"
+
+            var resolvedPath: String?
+            if command.contains("/") {
+                resolvedPath = command
+            } else {
+                let searchPaths = ["/usr/bin", "/bin", "/usr/sbin", "/sbin"]
+                for p in searchPaths {
+                    let fullPath = p + "/" + command
+                    if FileManager.default.isExecutableFile(atPath: fullPath) {
+                        resolvedPath = fullPath
+                        break
+                    }
+                }
+            }
+
+            guard let safePath = resolvedPath else {
+                throw FetchError.message(String(localized: "Command not found or not executable: \(command)"))
+            }
+            process.executableURL = URL(fileURLWithPath: safePath)
+            process.arguments = arguments
+        }
+
         process.environment = environment
         process.standardOutput = stdoutPipe
         process.standardInput = stdinPipe
