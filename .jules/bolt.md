@@ -21,3 +21,6 @@
 **Learning:** In Swift polling loops on macOS, repeatedly calling system APIs like `mach_host_self()` and `host_page_size()` (e.g., inside `cpuPercent()` or `memoryBreakdown()`) every tick introduces unnecessary overhead and can cause resource leaks (port exhaustion) if the port is not correctly managed/deallocated.
 
 **Action:** Cache these constants and initialized Mach ports during class initialization. Store the port in a property, re-use it during polling loops, and ensure proper cleanup using `mach_port_deallocate()` in the `deinit` block.
+## 2024-05-28 - Process execution overhead in tight polling loops
+**Learning:** Using `/usr/bin/env` as an executable wrapper for `Process` calls in Swift introduces significant `execve` and PATH resolution overhead on every tick, which is detrimental to performance in tight polling loops (e.g., refreshing system stats every 2-5 seconds).
+**Action:** When using Swift's `Process` API inside tight polling loops, bypass the `/usr/bin/env` wrapper by resolving absolute executable paths manually against a hardcoded safe list of directories. This prevents repeated `execve` overhead while avoiding command injection vulnerabilities.
