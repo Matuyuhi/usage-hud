@@ -21,3 +21,8 @@
 **Learning:** In Swift polling loops on macOS, repeatedly calling system APIs like `mach_host_self()` and `host_page_size()` (e.g., inside `cpuPercent()` or `memoryBreakdown()`) every tick introduces unnecessary overhead and can cause resource leaks (port exhaustion) if the port is not correctly managed/deallocated.
 
 **Action:** Cache these constants and initialized Mach ports during class initialization. Store the port in a property, re-use it during polling loops, and ensure proper cleanup using `mach_port_deallocate()` in the `deinit` block.
+
+## 2025-01-22 - Bypass `env` wrapper for tight polling process execution
+
+**Learning:** When using Swift's `Process` API inside tight polling loops (e.g. running `ps` every 2-5 seconds), using `/usr/bin/env` as the executable adds significant `execve` and `PATH` resolution overhead on every single tick.
+**Action:** Resolve the absolute path of the executable manually using `FileManager.fileExists` within the specified search path, and set it directly as the `Process.executableURL`. Only include the command name in `arguments` if a wrapper like `env` is actually being used.
