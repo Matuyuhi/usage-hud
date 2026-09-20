@@ -327,14 +327,39 @@ nonisolated final class ProcessSession {
     init(command: String, arguments: [String], timeout: TimeInterval, prependCustomPaths: Bool = false) throws {
         self.command = command
         self.deadline = Date().addingTimeInterval(timeout)
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = [command] + arguments
+
         var environment = ProcessInfo.processInfo.environment
-        let path = environment["PATH"] ?? "/usr/bin:/bin"
-        environment["PATH"] = prependCustomPaths
-            ? "\(NSHomeDirectory())/.local/bin:/opt/homebrew/bin:/usr/local/bin:" + path
+        let originalPath = environment["PATH"] ?? "/usr/bin:/bin"
+        let searchPath = prependCustomPaths
+            ? "\(NSHomeDirectory())/.local/bin:/opt/homebrew/bin:/usr/local/bin:" + originalPath
             : "/usr/bin:/bin:/usr/sbin:/sbin"
+        environment["PATH"] = searchPath
         process.environment = environment
+
+        var executableURL: URL?
+        if command.contains("/") {
+            if FileManager.default.isExecutableFile(atPath: command) {
+                executableURL = URL(fileURLWithPath: command)
+            }
+        } else {
+            let directories = searchPath.split(separator: ":").map(String.init)
+            for dir in directories {
+                let candidate = URL(fileURLWithPath: dir).appendingPathComponent(command)
+                if FileManager.default.isExecutableFile(atPath: candidate.path) {
+                    executableURL = candidate
+                    break
+                }
+            }
+        }
+
+        guard let resolvedURL = executableURL else {
+            throw FetchError.message(String(format: String(localized: "Command not found: %@"), command))
+        }
+
+        // Optimize: skip /usr/bin/env and resolve absolute path directly to save execve overhead
+        process.executableURL = resolvedURL
+        process.arguments = arguments
+
         process.standardOutput = stdoutPipe
         process.standardInput = stdinPipe
         process.standardError = FileHandle.nullDevice
