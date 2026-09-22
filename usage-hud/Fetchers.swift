@@ -327,14 +327,34 @@ nonisolated final class ProcessSession {
     init(command: String, arguments: [String], timeout: TimeInterval, prependCustomPaths: Bool = false) throws {
         self.command = command
         self.deadline = Date().addingTimeInterval(timeout)
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = [command] + arguments
         var environment = ProcessInfo.processInfo.environment
         let path = environment["PATH"] ?? "/usr/bin:/bin"
-        environment["PATH"] = prependCustomPaths
+        let searchPath = prependCustomPaths
             ? "\(NSHomeDirectory())/.local/bin:/opt/homebrew/bin:/usr/local/bin:" + path
             : "/usr/bin:/bin:/usr/sbin:/sbin"
+        environment["PATH"] = searchPath
         process.environment = environment
+
+        // Optimize: manually resolve absolute executable paths to bypass /usr/bin/env wrapper.
+        // This prevents significant execve and PATH resolution overhead on every tick,
+        // which is especially beneficial when running frequently (e.g., the 5-second ps sampling).
+        if command.contains("/") {
+            process.executableURL = URL(fileURLWithPath: command)
+        } else {
+            var foundURL: URL?
+            for dir in searchPath.split(separator: ":") {
+                let url = URL(fileURLWithPath: String(dir)).appendingPathComponent(command)
+                if FileManager.default.isExecutableFile(atPath: url.path) {
+                    foundURL = url
+                    break
+                }
+            }
+            guard let executableURL = foundURL else {
+                throw FetchError.message(String(localized: "Command not found: \(command)"))
+            }
+            process.executableURL = executableURL
+        }
+        process.arguments = arguments
         process.standardOutput = stdoutPipe
         process.standardInput = stdinPipe
         process.standardError = FileHandle.nullDevice
