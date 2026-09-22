@@ -21,3 +21,8 @@
 **Learning:** In Swift polling loops on macOS, repeatedly calling system APIs like `mach_host_self()` and `host_page_size()` (e.g., inside `cpuPercent()` or `memoryBreakdown()`) every tick introduces unnecessary overhead and can cause resource leaks (port exhaustion) if the port is not correctly managed/deallocated.
 
 **Action:** Cache these constants and initialized Mach ports during class initialization. Store the port in a property, re-use it during polling loops, and ensure proper cleanup using `mach_port_deallocate()` in the `deinit` block.
+
+## 2026-09-22 - [Rejected] Micro-optimizations in loops that are not hot, with no measurement
+**Claim:** Bypassing the `/usr/bin/env` wrapper in `ProcessSession`, and replacing `NSString` bridging (`lastPathComponent`, `deletingPathExtension`) in `AppNames.resolve` / `BundleNameCache.read`, remove per-tick overhead.
+**Why it was rejected:** Neither site is hot. `ProcessSession` spawns at most once per 5s (`ps`, and only while the System section is expanded) and once per 120s / 1800s for the services, so a single `execve` of `env` is invisible — and replacing it with a `stat` walk over the search path trades it for syscalls of its own. `BundleNameCache.read` runs only on a cache miss (names are memoized for the process lifetime), and the non-bundle branch of `AppNames.resolve` covers a few dozen daemons. Both rewrites also reimplement `lastPathComponent` / `deletingPathExtension` edge cases by hand, and the `env` ones drop the localized error strings.
+**Action:** Attach a number. An optimization in this repo needs a profile or a before/after timing showing the site actually costs something; without one, prefer the existing code and its localization.
