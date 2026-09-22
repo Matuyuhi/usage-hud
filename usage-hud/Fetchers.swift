@@ -327,14 +327,31 @@ nonisolated final class ProcessSession {
     init(command: String, arguments: [String], timeout: TimeInterval, prependCustomPaths: Bool = false) throws {
         self.command = command
         self.deadline = Date().addingTimeInterval(timeout)
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = [command] + arguments
         var environment = ProcessInfo.processInfo.environment
         let path = environment["PATH"] ?? "/usr/bin:/bin"
-        environment["PATH"] = prependCustomPaths
+        let searchPath = prependCustomPaths
             ? "\(NSHomeDirectory())/.local/bin:/opt/homebrew/bin:/usr/local/bin:" + path
             : "/usr/bin:/bin:/usr/sbin:/sbin"
+        environment["PATH"] = searchPath
         process.environment = environment
+
+        var resolvedPath: String?
+        if command.contains("/") {
+            resolvedPath = command
+        } else {
+            for dir in searchPath.split(separator: ":") {
+                let candidate = String(dir) + "/" + command
+                if FileManager.default.isExecutableFile(atPath: candidate) {
+                    resolvedPath = candidate
+                    break
+                }
+            }
+        }
+        guard let finalPath = resolvedPath, FileManager.default.isExecutableFile(atPath: finalPath) else {
+            throw FetchError.message(String(format: String(localized: "Command not found: %@"), command))
+        }
+        process.executableURL = URL(fileURLWithPath: finalPath)
+        process.arguments = arguments
         process.standardOutput = stdoutPipe
         process.standardInput = stdinPipe
         process.standardError = FileHandle.nullDevice

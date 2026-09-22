@@ -10,3 +10,7 @@
 **Vulnerability:** `ProcessSession.readUntilEOF()` and `ProcessSession.waitForLine()` read process stdout into memory unconditionally until EOF or a timeout. A malicious or malfunctioning child process could output an enormous amount of data, causing unbounded memory consumption and leading to an Out-of-Memory (OOM) crash in the parent application (local DoS).
 **Learning:** Any operation that buffers input from an external process or network socket must enforce a maximum size limit, even if the external entity is a trusted local utility, to prevent accidental or intentional resource exhaustion.
 **Prevention:** Implement a maximum buffer size limit (e.g., 5MB) in all stream-reading loops. If the limit is exceeded, cleanly terminate the read operation (truncate) or throw a descriptive error.
+## 2026-08-31 - [CWE-426 Command Injection Bypass via /usr/bin/env]
+**Vulnerability:** Invoking commands via `/usr/bin/env` even with a sanitized `PATH` is insecure because `env` inherently resolves relative commands against the current working directory, which may be attacker-controlled.
+**Learning:** Wrapper programs like `/usr/bin/env` introduce unintended resolution vectors that can bypass intended search paths and lead to Command Injection (CWE-426).
+**Prevention:** Manually resolve the absolute path to the executable file using `FileManager.default.isExecutableFile(atPath:)` and invoke it directly, rather than relying on `/usr/bin/env` to handle `PATH` resolution.
