@@ -345,6 +345,7 @@ struct PanelView: View {
             Menu {
                 DisplayItemPicker(store: store, onChange: resizeAfterLayout)
                 Divider()
+                UsageAlertsToggle(store: store)
                 LaunchAtLoginToggle()
                 LanguagePicker()
                 Divider()
@@ -520,6 +521,17 @@ private struct LanguagePicker: View {
         .onChange(of: selection) { _, language in
             LanguageSetting.apply(language)
         }
+    }
+}
+
+/// 使用量が 80% / 95% を超えたら通知する。有効にするときに通知の許可を求める
+private struct UsageAlertsToggle: View {
+    @ObservedObject var store: UsageStore
+
+    var body: some View {
+        Toggle("Notify when usage runs high", isOn: Binding(
+            get: { store.alertsEnabled },
+            set: { store.setAlertsEnabled($0) }))
     }
 }
 

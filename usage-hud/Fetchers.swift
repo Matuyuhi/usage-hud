@@ -276,9 +276,32 @@ nonisolated func parseISODate(_ string: String) -> Date? {
 }
 
 nonisolated func formatDetailDate(_ date: Date) -> String {
-    let formatter = DateFormatter()
-    formatter.dateFormat = "M/d HH:mm"
-    return formatter.string(from: date)
+    DetailDateFormatter.shared.string(from: date)
+}
+
+/// パネルはシステム指標の更新(2 秒ごと)のたびにゲージのリセット日時を描き直すので、
+/// DateFormatter(作るのが重い)を毎回作らずに使い回す。
+/// Codex の取得は off-main から呼ぶのでロックで守る。DateFormatter は作った時点のタイムゾーンを
+/// 持ち続けるため、タイムゾーンが変わったら作り直す
+private nonisolated final class DetailDateFormatter: @unchecked Sendable {
+    static let shared = DetailDateFormatter()
+
+    private let lock = NSLock()
+    private var formatter: DateFormatter?
+
+    func string(from date: Date) -> String {
+        lock.lock()
+        defer { lock.unlock() }
+        let zone = TimeZone.current
+        if let cached = formatter, cached.timeZone == zone {
+            return cached.string(from: date)
+        }
+        let created = DateFormatter()
+        created.dateFormat = "M/d HH:mm"
+        created.timeZone = zone
+        formatter = created
+        return created.string(from: date)
+    }
 }
 
 nonisolated func groupedNumber(_ value: Double) -> String {
