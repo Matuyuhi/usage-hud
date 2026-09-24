@@ -65,15 +65,17 @@ enum ClaudeFetcher {
                   let percent = limit["percent"] as? Double else { continue }
             let resets = (limit["resets_at"] as? String).flatMap(parseISODate)
             let label: String
+            var key = kind
             switch kind {
             case "session": label = String(localized: "5h")
             case "weekly_all": label = String(localized: "Week")
             case "weekly_scoped":
                 let model = ((limit["scope"] as? [String: Any])?["model"] as? [String: Any])?["display_name"] as? String
                 label = String(format: String(localized: "Week (%@)"), model ?? String(localized: "Per model"))
+                key += ":" + (model ?? "")
             default: continue
             }
-            gauges.append(Gauge(label: label, usedPercent: percent, resetsAt: resets))
+            gauges.append(Gauge(label: label, usedPercent: percent, resetsAt: resets, key: key))
         }
         var details: [DetailItem] = gauges.compactMap { gauge in
             gauge.resetsAt.map {
@@ -133,7 +135,8 @@ enum CodexFetcher {
         if let individual = rateLimits["individualLimit"] as? [String: Any],
            let remaining = individual["remainingPercent"] as? Double {
             let resets = (individual["resetsAt"] as? Double).map { Date(timeIntervalSince1970: $0) }
-            gauges.append(Gauge(label: String(localized: "Month"), usedPercent: 100 - remaining, resetsAt: resets))
+            gauges.append(Gauge(
+                label: String(localized: "Month"), usedPercent: 100 - remaining, resetsAt: resets, key: "individual"))
             if let limit = looseDouble(individual["limit"]), let used = looseDouble(individual["used"]) {
                 details.append(DetailItem(
                     label: String(localized: "Monthly credits"),
@@ -154,7 +157,7 @@ enum CodexFetcher {
             let minutes = window["window_minutes"] as? Double ?? 0
             let label = minutes >= 10000 ? String(localized: "Week") : String(localized: "5h")
             let resets = (window["resets_in_seconds"] as? Double).map { Date().addingTimeInterval($0) }
-            gauges.append(Gauge(label: label, usedPercent: used, resetsAt: resets))
+            gauges.append(Gauge(label: label, usedPercent: used, resetsAt: resets, key: key))
         }
         let plan = rateLimits["planType"] as? String
         return ServiceUsage(gauges: gauges, detail: plan, error: nil, updatedAt: Date(), details: details)
@@ -214,7 +217,7 @@ enum CopilotFetcher {
         if let premium = snapshots["premium_interactions"] as? [String: Any],
            (premium["unlimited"] as? Bool) != true,
            let remaining = premium["percent_remaining"] as? Double {
-            gauges.append(Gauge(label: "Premium", usedPercent: 100 - remaining, resetsAt: reset))
+            gauges.append(Gauge(label: "Premium", usedPercent: 100 - remaining, resetsAt: reset, key: "premium_interactions"))
             if let left = premium["remaining"] as? Double, let total = premium["entitlement"] as? Double {
                 details.append(DetailItem(
                     label: String(localized: "Premium left"),

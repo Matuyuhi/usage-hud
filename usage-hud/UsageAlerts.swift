@@ -63,7 +63,8 @@ final class UsageAlerts: NSObject, UNUserNotificationCenterDelegate {
         var changed = false
         for (service, usage) in services {
             for gauge in usage?.gauges ?? [] {
-                let key = "\(service.rawValue)|\(gauge.label)"
+                // 翻訳される label ではなく key で覚える(言語を切り替えると同じ枠で再通知してしまう)
+                let key = "\(service.rawValue)|\(gauge.key ?? gauge.label)"
                 let before = levels.notified
                 if levels.update(key: key, usedPercent: gauge.usedPercent) != nil {
                     post(service: service, gauge: gauge)
@@ -87,10 +88,13 @@ final class UsageAlerts: NSObject, UNUserNotificationCenterDelegate {
         }
         content.body = lines.joined(separator: "\n")
         content.sound = .default
-        // 同じゲージの通知は差し替える(80% の通知の後に 95% が来たら 1 件にまとめる)
-        let request = UNNotificationRequest(
-            identifier: "usage-alert.\(service.rawValue).\(gauge.label)", content: content, trigger: nil)
-        UNUserNotificationCenter.current().add(request, withCompletionHandler: nil)
+        // 同じゲージの通知は差し替える(80% の通知の後に 95% が来たら 1 件にまとめる)。
+        // 同じ identifier で add しても差し替わるのは配信前の要求だけなので、配信済みのものは先に消す
+        let identifier = "usage-alert.\(service.rawValue).\(gauge.key ?? gauge.label)"
+        let center = UNUserNotificationCenter.current()
+        center.removeDeliveredNotifications(withIdentifiers: [identifier])
+        let request = UNNotificationRequest(identifier: identifier, content: content, trigger: nil)
+        center.add(request, withCompletionHandler: nil)
     }
 
     // MARK: - UNUserNotificationCenterDelegate
@@ -116,7 +120,7 @@ final class UsageAlerts: NSObject, UNUserNotificationCenterDelegate {
 nonisolated struct UsageAlertLevels: Equatable {
     /// 使用率(%)。上から順に超えたかを見て、一度に知らせるのは超えた中で一番高いものだけ
     static let thresholds: [Double] = [80, 95]
-    /// 閾値付近の揺れで「通知済み」を取り消して二重に知らせないための余裕
+    /// 閾値付近の揺れで「通知済み」を取り消して二重に知らせないための余裕。この幅以上下がったら新しい窓とみなす
     static let hysteresis: Double = 5
 
     /// "claude|5h" → 通知済みの閾値
@@ -129,7 +133,7 @@ nonisolated struct UsageAlertLevels: Equatable {
     /// 今回の使用率を記録し、新しく知らせるべき閾値を返す(無ければ nil)
     mutating func update(key: String, usedPercent: Double) -> Double? {
         let reached = Self.thresholds.last { $0 <= usedPercent }
-        if let previous = notified[key], usedPercent < previous - Self.hysteresis {
+        if let previous = notified[key], usedPercent <= previous - Self.hysteresis {
             // 大きく下がった = 新しい窓に入った。今の使用率で届いている段階まで巻き戻す
             notified[key] = reached
         }

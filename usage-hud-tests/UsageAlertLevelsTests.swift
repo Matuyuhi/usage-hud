@@ -31,6 +31,17 @@ final class UsageAlertLevelsTests: XCTestCase {
         XCTAssertNil(levels.update(key: key, usedPercent: 82))
     }
 
+    /// ちょうど 5 ポイント下がったら新しい窓とみなす(4.x ポイントなら揺れとして扱う)
+    func testHysteresisBoundary() {
+        var levels = UsageAlertLevels()
+        XCTAssertEqual(levels.update(key: key, usedPercent: 80), 80)
+        XCTAssertNil(levels.update(key: key, usedPercent: 75.5))
+        XCTAssertEqual(levels.notified[key], 80)
+        XCTAssertNil(levels.update(key: key, usedPercent: 75))
+        XCTAssertNil(levels.notified[key])
+        XCTAssertEqual(levels.update(key: key, usedPercent: 80), 80)
+    }
+
     /// 使用率が大きく下がったら新しい窓とみなし、次に超えたときにまた知らせる
     func testResetRearms() {
         var levels = UsageAlertLevels()
