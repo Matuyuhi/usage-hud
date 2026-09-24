@@ -76,6 +76,7 @@ final class UsageStore: ObservableObject {
         snapshot = SharedStore.load()
         refresh()
         rescheduleQuotaTimer()
+        reconcileAlerts()
     }
 
     func panelVisibilityChanged(visible: Bool) {
@@ -84,6 +85,7 @@ final class UsageStore: ObservableObject {
         rescheduleSystemTimer()
         if visible {
             refresh()
+            reconcileAlerts()
         }
     }
 
@@ -157,6 +159,17 @@ final class UsageStore: ObservableObject {
         }
     }
 
+    /// 通知の許可が取り消されていたら、表示と非表示中の取得間隔を合わせ直す
+    private func reconcileAlerts() {
+        guard let alerts, alerts.isEnabled else { return }
+        Task {
+            let enabled = await alerts.reconcileWithAuthorization()
+            guard enabled != alertsEnabled else { return }
+            alertsEnabled = enabled
+            rescheduleQuotaTimer()
+        }
+    }
+
     func refresh(force: Bool = false) {
         guard !isFetching else {
             // 取得中に有効化されたサービスは、今の取得では拾えないので終わり次第もう一度回す
@@ -185,8 +198,9 @@ final class UsageStore: ObservableObject {
                 fetchedAt: Date())
             isFetching = false
             syncRefreshingIndicator()
-            // 通知はパネルの再描画を伴わないので、メニュー表示中でも待たずに判定する
-            alerts?.evaluate(fresh)
+            // 通知はパネルの再描画を伴わないので、メニュー表示中でも待たずに判定する。
+            // 取得中に無効化されたサービスを知らせないよう、今の選択で絞ってから見る
+            alerts?.evaluate(withCurrentSelection(fresh))
             applyOrDefer(fresh, sample: sample)
             if pendingRefresh {
                 pendingRefresh = false

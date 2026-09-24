@@ -87,6 +87,8 @@ universal Release ビルド・上のチェック・スナップショットテ�
 
 - 判定は `UsageAlertLevels`（通知センターに触れない純粋な struct。`UsageAlertLevelsTests` で値を確かめている）。
   通知済みの段階はゲージ（`service|label`）ごとに UserDefaults に持ち、再起動しても同じ枠で再通知しない
+- 有効の設定は起動時とパネルを開くたびに通知の許可と突き合わせ、システム設定で取り消されていたら無効に戻す
+  （`reconcileWithAuthorization`。残すと通知は届かないのに 600s の取得だけ続く）
 - 枠の切り替わりはリセット日時ではなく**使用率が 5 ポイント以上下がったこと**で判定する。
   Codex の 5h 枠はリセットまでの秒数で返るので、リセット日時が取得のたびにずれて同じ枠かどうか比べられない
 - `UNUserNotificationCenter` に触れるのは `activate()` 以降（`AppDelegate` が XCTest ホストの判定の後に呼ぶ）。

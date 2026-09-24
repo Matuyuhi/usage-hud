@@ -41,6 +41,18 @@ final class UsageAlerts: NSObject, UNUserNotificationCenterDelegate {
         return granted
     }
 
+    /// 有効にした後でシステム設定から通知の許可を取り消されていたら、無効に戻す。
+    /// 残したままだと通知は届かないのに、非表示中の 10 分ごとの取得だけが続く
+    func reconcileWithAuthorization() async -> Bool {
+        guard isEnabled else { return false }
+        let status = await UNUserNotificationCenter.current().notificationSettings().authorizationStatus
+        if status != .authorized && status != .provisional {
+            isEnabled = false
+            UserDefaults.standard.set(false, forKey: Self.enabledKey)
+        }
+        return isEnabled
+    }
+
     /// 取得結果を見て、新しく閾値を超えたゲージを通知する。無効な間は通知済みの記録も進めない
     /// (有効にした時点で既に超えているゲージは、その時点で 1 度だけ知らせる)
     func evaluate(_ snapshot: UsageSnapshot) {
