@@ -701,6 +701,46 @@
         }
       }
     },
+    "Daily summary of weekly limits" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "毎朝、週・月の枠の残りを通知"
+          }
+        }
+      }
+    },
+    "Daily usage summary" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "今日の使用量"
+          }
+        }
+      }
+    },
+    "%1$@ · %2$@: %3$@ left" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ · %2$@: 残り %3$@"
+          }
+        }
+      }
+    },
+    "until %@" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ まで"
+          }
+        }
+      }
+    },
     "Notify when usage runs high" : {
       "localizations" : {
         "ja" : {

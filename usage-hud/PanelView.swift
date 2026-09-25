@@ -346,6 +346,7 @@ struct PanelView: View {
                 DisplayItemPicker(store: store, onChange: resizeAfterLayout)
                 Divider()
                 UsageAlertsToggle(store: store)
+                DailySummaryToggle(store: store)
                 LaunchAtLoginToggle()
                 LanguagePicker()
                 Divider()
@@ -532,6 +533,17 @@ private struct UsageAlertsToggle: View {
         Toggle("Notify when usage runs high", isOn: Binding(
             get: { store.alertsEnabled },
             set: { store.setAlertsEnabled($0) }))
+    }
+}
+
+/// 毎朝 1 回、週 / 月の枠の残りとリセット日時をまとめて通知する。有効にするときに通知の許可を求める
+private struct DailySummaryToggle: View {
+    @ObservedObject var store: UsageStore
+
+    var body: some View {
+        Toggle("Daily summary of weekly limits", isOn: Binding(
+            get: { store.summaryEnabled },
+            set: { store.setSummaryEnabled($0) }))
     }
 }
 

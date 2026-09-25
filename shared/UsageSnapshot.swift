@@ -42,6 +42,9 @@ nonisolated struct Gauge: Codable, Identifiable {
     /// 通知済みの記録のように言語を切り替えても同じゲージとして扱いたいものはこちらを使う。
     /// 古い JSON には無いので optional
     var key: String? = nil
+    /// 5h 枠のように数時間で戻る枠か。1 日 1 回のまとめ通知は週 / 月の枠だけを載せるので、それを見分ける。
+    /// 古い JSON には無いので optional(nil は長い枠として扱う)
+    var isShortWindow: Bool? = nil
 
     var remainingPercent: Double { max(0, 100 - usedPercent) }
 }
