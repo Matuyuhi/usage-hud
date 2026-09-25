@@ -27,6 +27,9 @@ final class UsageStore: ObservableObject {
     private static let rateLimitCooldown: TimeInterval = 900
     /// スリープ明けにまとめ通知のための取得を待つ時間
     private static let wakeSettleDelay: TimeInterval = 60
+    /// まとめ通知を出せなかった(取得に失敗した)ときに取り直す回数。間隔は alertInterval。
+    /// 閾値の通知が無効でウィジェットも無いと非表示中は他に取得が走らないので、ここで取り直す
+    private static let summaryMaxRetries = 6
 
     private let sampler = SystemSampler()
     /// 使用量の通知。テスト / プレビューでは持たない(通知センターに触れない)
@@ -34,6 +37,7 @@ final class UsageStore: ObservableObject {
     private var quotaTimer: Timer?
     /// まとめ通知の時刻に 1 回だけ取得するタイマー。定期取得の間隔とは独立に張る
     private var summaryTimer: Timer?
+    private var summaryRetryCount = 0
     private var wakeObserver: NSObjectProtocol?
     private var lastWidgetReload: Date?
     private var systemTimer: Timer?
@@ -235,6 +239,11 @@ final class UsageStore: ObservableObject {
             // まとめ通知は時刻を過ぎてから最初の取得で出す。出したら次の日の時刻に張り直す
             if alerts?.postSummaryIfDue(selected) == true {
                 rescheduleSummaryTimer()
+            } else if alerts?.isSummaryDue == true, summaryTimer?.isValid != true,
+                      summaryRetryCount < Self.summaryMaxRetries {
+                // 出せなかった回は少し置いて取り直す(待っている間に走った他の取得で出せればそれで済む)
+                summaryRetryCount += 1
+                rescheduleSummaryTimer(delay: Self.alertInterval, isRetry: true)
             }
             applyOrDefer(fresh, sample: sample)
             if pendingRefresh {
@@ -406,8 +415,9 @@ final class UsageStore: ObservableObject {
     }
 
     /// まとめ通知の時刻に取得を 1 回走らせる。取得の完了時に `postSummaryIfDue` が出すので、ここでは取るだけ。
-    /// 載せる枠が無く出せなかった回はタイマーを張り直さない(以降の定期取得やパネルを開いたときの取得で出す)
-    private func rescheduleSummaryTimer(delay: TimeInterval = 0) {
+    /// 載せる枠が無く出せなかった回は、refresh の完了時に alertInterval 後の取り直しとして張り直す(summaryMaxRetries 回まで)
+    private func rescheduleSummaryTimer(delay: TimeInterval = 0, isRetry: Bool = false) {
+        if !isRetry { summaryRetryCount = 0 }
         summaryTimer?.invalidate()
         summaryTimer = nil
         guard let alerts, alerts.isSummaryEnabled, !enabledServices.isEmpty else { return }

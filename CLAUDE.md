@@ -96,7 +96,8 @@ universal Release ビルド・上のチェック・スナップショットテ�
   9 時（`DailySummarySchedule.hour`）を過ぎてから最初の取得で、週 / 月の枠（`Gauge.isShortWindow != true`）の残りとリセット日時を 1 件にまとめる。
   `UNCalendarNotificationTrigger` で予約しないのは中身を直前の取得結果で作るため。時刻に 1 回だけ取得するタイマー（`UsageStore.rescheduleSummaryTimer`）を張り、
   Timer はスリープ中を数えないので `didWakeNotification` で張り直す（起床直後は 60 秒待つ）。出した日時を UserDefaults に持って同じ回に二度出さない。
-  載せる枠が無かった回は出したことにせず、以降の取得で出す（`DailySummaryScheduleTests`）
+  取得に失敗したサービス（前回値が残っているだけ）は載せない。載せる枠が無かった回は出したことにせず、
+  600s 後に取り直す（6 回まで。閾値の通知が無効でウィジェットも無いと、非表示中は他に取得が走らないため）（`DailySummaryScheduleTests`）
 - `UNUserNotificationCenter` に触れるのは `activate()` 以降（`AppDelegate` が XCTest ホストの判定の後に呼ぶ）。
   プレビュー用の `UsageStore(preview:...)` は `alerts` を持たない
 

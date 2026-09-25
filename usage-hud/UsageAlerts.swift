@@ -112,6 +112,11 @@ final class UsageAlerts: NSObject, UNUserNotificationCenterDelegate {
         center.add(request, withCompletionHandler: nil)
     }
 
+    /// まとめ通知を出すべき回で、まだ出していないか
+    var isSummaryDue: Bool {
+        isSummaryEnabled && DailySummarySchedule.isDue(now: Date(), lastSent: summaryLastSent)
+    }
+
     /// まとめ通知の時刻を過ぎていて今日まだ出していなければ、週 / 月の枠の残りとリセット日時を 1 件にまとめて出す。
     /// 出したら true(呼び出し側は次の日の時刻にタイマーを張り直す)。
     /// 載せる枠が 1 つも無い(取得に失敗した等)ときは出したことにせず、次の取得で出し直す
@@ -121,7 +126,8 @@ final class UsageAlerts: NSObject, UNUserNotificationCenterDelegate {
             (.claude, snapshot.claude), (.codex, snapshot.codex), (.copilot, snapshot.copilot),
         ]
         var lines: [String] = []
-        for (service, usage) in services {
+        // 取得に失敗したサービスは前回値が残っているだけなので載せない(古い値で「今日の分」を済ませない)
+        for (service, usage) in services where usage?.error == nil {
             // 5h 枠は数時間で戻るので、朝に知らせても意味が無い
             for gauge in usage?.gauges ?? [] where gauge.isShortWindow != true {
                 var line = String(
