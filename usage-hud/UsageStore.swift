@@ -183,9 +183,7 @@ final class UsageStore: ObservableObject {
         }
         isFetching = true
         syncRefreshingIndicator()
-        // TimeZone.current はプロセス内でキャッシュされ、常駐中にシステムのタイムゾーンが変わっても
-        // 追従しないことがある(UTC のまま JST に変わり、リセット日時が 9 時間ずれて出た)。
-        // 取得のたびに捨てて読み直させる。詳細欄の日時は取得時に文字列にするのでここで足りる
+        // TimeZone.current はキャッシュされ、常駐中のタイムゾーン変更に追従しないことがある
         NSTimeZone.resetSystemTimeZone()
         Task {
             // 無効なサービスは fetch 自体を呼ばない(CLI の起動も HTTP 呼び出しも発生しない)
