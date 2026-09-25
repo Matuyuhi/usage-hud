@@ -146,7 +146,7 @@ final class UsageAlerts: NSObject, UNUserNotificationCenterDelegate {
 /// 通知の文面。通知センターに触れない純粋な組み立てなので、スナップショットテストでバナー風に描いて見た目を確かめる。
 ///
 /// バナーは本文の先頭 2 行ほどしか見えないので、一番知りたいこと(残り何 %)をタイトルに入れ、
-/// まとめ通知は残りの少ない枠から並べる
+/// まとめ通知は残りの少ない枠から、折り返さない長さの 1 行ずつで並べる
 struct UsageNotificationText: Equatable {
     var title: String
     var subtitle = ""
@@ -191,18 +191,25 @@ struct UsageNotificationText: Equatable {
         // 残りの少ない枠を上に。バナーで切れても危ない枠は見える(同じ残りならサービスの順のまま)
         let lines = gauges.enumerated()
             .sorted { ($0.element.1.remainingPercent, $0.offset) < ($1.element.1.remainingPercent, $1.offset) }
-            .map { entry in
+            .map { entry -> String in
                 let (service, gauge) = entry.element
-                var line = severityMark(gauge.usedPercent) + " " + gaugeText(service: service, gauge: gauge)
-                if let resets = gauge.resetsAt {
-                    line += " · " + String(format: String(localized: "resets in %@"), untilText(resets, now: now))
+                let mark = severityMark(gauge.usedPercent)
+                let remaining = percentText(gauge.remainingPercent)
+                guard let resets = gauge.resetsAt else {
+                    return "\(mark) \(service.title) \(gauge.label) \(remaining)"
                 }
-                return line
+                return String(
+                    format: String(localized: "%1$@ %2$@ %3$@ %4$@ (%5$@)"),
+                    mark, service.title, gauge.label, remaining, untilText(resets, now: now))
             }
-        return Self(title: String(localized: "Daily usage summary"), body: lines.joined(separator: "\n"))
+        // 1 行に収めるため、行には数字だけを置き、何の数字かはサブタイトルで 1 度だけ言う
+        return Self(
+            title: String(localized: "Daily usage summary"),
+            subtitle: String(localized: "Left (time until reset)"),
+            body: lines.joined(separator: "\n"))
     }
 
-    /// 「Claude Code · Weekly: 残り 38%」
+    /// 「Claude Code · Session: 残り 4%」
     private static func gaugeText(service: DisplayItem, gauge: Gauge) -> String {
         String(
             format: String(localized: "%1$@ · %2$@: %3$@ left"),
@@ -223,7 +230,8 @@ struct UsageNotificationText: Equatable {
         let minutes = max(0, Int(date.timeIntervalSince(now) / 60))
         let days = minutes / (24 * 60)
         guard days > 0 else { return durationText(minutes) }
-        return "\(days)d \((minutes % (24 * 60)) / 60)h"
+        let hours = (minutes % (24 * 60)) / 60
+        return hours > 0 ? "\(days)d \(hours)h" : "\(days)d"
     }
 }
 

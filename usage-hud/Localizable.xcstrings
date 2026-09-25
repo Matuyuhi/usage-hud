@@ -1,6 +1,16 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "%1$@ %2$@ %3$@ %4$@ (%5$@)" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ %2$@ %3$@ %4$@（%5$@）"
+          }
+        }
+      }
+    },
     "%@ left" : {
       "localizations" : {
         "ja" : {
@@ -211,6 +221,16 @@
         }
       }
     },
+    "Left (time until reset)" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "残り（リセットまで）"
+          }
+        }
+      }
+    },
     "Loading…" : {
       "localizations" : {
         "ja" : {
@@ -397,16 +417,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "あと %1$@ でリセット · %2$@"
-          }
-        }
-      }
-    },
-    "resets in %@" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "あと %@ でリセット"
           }
         }
       }

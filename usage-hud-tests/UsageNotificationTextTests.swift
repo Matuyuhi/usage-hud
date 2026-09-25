@@ -27,6 +27,7 @@ final class UsageNotificationTextTests: XCTestCase {
         let now = SampleData.fetchedAt
         XCTAssertEqual(UsageNotificationText.untilText(now.addingTimeInterval(95 * 60), now: now), "1h 35m")
         XCTAssertEqual(UsageNotificationText.untilText(now.addingTimeInterval(4 * 86400 + 3 * 3600), now: now), "4d 3h")
+        XCTAssertEqual(UsageNotificationText.untilText(now.addingTimeInterval(4 * 86400), now: now), "4d")
         // 取得からリセットをまたいだら 0 に丸める
         XCTAssertEqual(UsageNotificationText.untilText(now.addingTimeInterval(-60), now: now), "0m")
     }
