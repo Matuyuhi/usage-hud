@@ -700,6 +700,36 @@
           }
         }
       }
+    },
+    "Notify when usage runs high" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用量が多くなったら通知"
+          }
+        }
+      }
+    },
+    "%1$@ used · %2$@ left" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ 使用 · 残り %2$@"
+          }
+        }
+      }
+    },
+    "Resets %@" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ にリセット"
+          }
+        }
+      }
     }
   },
   "version" : "1.0"

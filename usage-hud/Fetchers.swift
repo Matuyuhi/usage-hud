@@ -65,15 +65,17 @@ enum ClaudeFetcher {
                   let percent = limit["percent"] as? Double else { continue }
             let resets = (limit["resets_at"] as? String).flatMap(parseISODate)
             let label: String
+            var key = kind
             switch kind {
             case "session": label = String(localized: "5h")
             case "weekly_all": label = String(localized: "Week")
             case "weekly_scoped":
                 let model = ((limit["scope"] as? [String: Any])?["model"] as? [String: Any])?["display_name"] as? String
                 label = String(format: String(localized: "Week (%@)"), model ?? String(localized: "Per model"))
+                key += ":" + (model ?? "")
             default: continue
             }
-            gauges.append(Gauge(label: label, usedPercent: percent, resetsAt: resets))
+            gauges.append(Gauge(label: label, usedPercent: percent, resetsAt: resets, key: key))
         }
         var details: [DetailItem] = gauges.compactMap { gauge in
             gauge.resetsAt.map {
@@ -133,7 +135,8 @@ enum CodexFetcher {
         if let individual = rateLimits["individualLimit"] as? [String: Any],
            let remaining = individual["remainingPercent"] as? Double {
             let resets = (individual["resetsAt"] as? Double).map { Date(timeIntervalSince1970: $0) }
-            gauges.append(Gauge(label: String(localized: "Month"), usedPercent: 100 - remaining, resetsAt: resets))
+            gauges.append(Gauge(
+                label: String(localized: "Month"), usedPercent: 100 - remaining, resetsAt: resets, key: "individual"))
             if let limit = looseDouble(individual["limit"]), let used = looseDouble(individual["used"]) {
                 details.append(DetailItem(
                     label: String(localized: "Monthly credits"),
@@ -154,7 +157,7 @@ enum CodexFetcher {
             let minutes = window["window_minutes"] as? Double ?? 0
             let label = minutes >= 10000 ? String(localized: "Week") : String(localized: "5h")
             let resets = (window["resets_in_seconds"] as? Double).map { Date().addingTimeInterval($0) }
-            gauges.append(Gauge(label: label, usedPercent: used, resetsAt: resets))
+            gauges.append(Gauge(label: label, usedPercent: used, resetsAt: resets, key: key))
         }
         let plan = rateLimits["planType"] as? String
         return ServiceUsage(gauges: gauges, detail: plan, error: nil, updatedAt: Date(), details: details)
@@ -214,7 +217,7 @@ enum CopilotFetcher {
         if let premium = snapshots["premium_interactions"] as? [String: Any],
            (premium["unlimited"] as? Bool) != true,
            let remaining = premium["percent_remaining"] as? Double {
-            gauges.append(Gauge(label: "Premium", usedPercent: 100 - remaining, resetsAt: reset))
+            gauges.append(Gauge(label: "Premium", usedPercent: 100 - remaining, resetsAt: reset, key: "premium_interactions"))
             if let left = premium["remaining"] as? Double, let total = premium["entitlement"] as? Double {
                 details.append(DetailItem(
                     label: String(localized: "Premium left"),
@@ -276,9 +279,32 @@ nonisolated func parseISODate(_ string: String) -> Date? {
 }
 
 nonisolated func formatDetailDate(_ date: Date) -> String {
-    let formatter = DateFormatter()
-    formatter.dateFormat = "M/d HH:mm"
-    return formatter.string(from: date)
+    DetailDateFormatter.shared.string(from: date)
+}
+
+/// パネルはシステム指標の更新(2 秒ごと)のたびにゲージのリセット日時を描き直すので、
+/// DateFormatter(作るのが重い)を毎回作らずに使い回す。
+/// Codex の取得は off-main から呼ぶのでロックで守る。DateFormatter は作った時点のタイムゾーンを
+/// 持ち続けるため、タイムゾーンが変わったら作り直す
+private nonisolated final class DetailDateFormatter: @unchecked Sendable {
+    static let shared = DetailDateFormatter()
+
+    private let lock = NSLock()
+    private var formatter: DateFormatter?
+
+    func string(from date: Date) -> String {
+        lock.lock()
+        defer { lock.unlock() }
+        let zone = TimeZone.current
+        if let cached = formatter, cached.timeZone == zone {
+            return cached.string(from: date)
+        }
+        let created = DateFormatter()
+        created.dateFormat = "M/d HH:mm"
+        created.timeZone = zone
+        formatter = created
+        return created.string(from: date)
+    }
 }
 
 nonisolated func groupedNumber(_ value: Double) -> String {

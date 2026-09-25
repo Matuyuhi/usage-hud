@@ -32,7 +32,7 @@ scripts/snapshot-test.sh --record-missing   # ケースを足したら、無い�
 上書きするので、ずれると困るのは `scripts/install.sh` で入れたローカルビルドだけ。
 だから手で pbxproj を編集せず `scripts/bump-version.sh` を通し、一致は `check-invariants.sh` が見張る。
 
-テストはスナップショットテストのみ（`usage-hud-tests/`）。CI（`.github/workflows/ci.yml`）は PR で
+テストはスナップショットテストと、通知の判定（`UsageAlertLevelsTests`）のような純粋なロジックの値のテスト（`usage-hud-tests/`）。CI（`.github/workflows/ci.yml`）は PR で
 universal Release ビルド・上のチェック・スナップショットテストを回す。データ取得の振る舞いは実行して確認する:
 
 - `~/Library/Application Support/usage-hud/usage.json` に 3 サービスの gauges がエラーなしで入ること
@@ -73,7 +73,27 @@ universal Release ビルド・上のチェック・スナップショットテ�
   `UsageWidgetView`（ウィジェットの描画本体。本体側のスナップショットテストから描くためここにある）
 - `usage-hud-tests/` — スナップショットテスト（上記）。本体をホストにするので `@testable import usage_hud` で本体の型を使う
 
-データの流れ: `Fetchers.swift`（3 サービス並列取得）→ `UsageStore`（@MainActor、タイマー管理: パネル表示中 120s / 非表示 1800s / システム指標 2s）→ `SharedStore.save()` → ウィジェットの `TimelineProvider` が読む。
+データの流れ: `Fetchers.swift`（3 サービス並列取得）→ `UsageStore`（@MainActor、タイマー管理: パネル表示中 120s / 非表示 1800s（通知が有効なら 600s）/ システム指標 2s）→ `SharedStore.save()` → ウィジェットの `TimelineProvider` が読む。
+タイマーには間隔の 10% の `tolerance` を付けて、OS が起床をまとめられるようにしている。
+
+本体は前面に来ない（LSUIElement）ので、`reloadAllTimelines()` は WidgetKit の 1 日あたりの再読込予算に数えられる。
+非表示中の再読込は `hiddenInterval` より細かくしない（`UsageStore.reloadWidgetIfNeeded`。JSON は毎回書く）。
+
+### 使用量の通知（`UsageAlerts`）
+
+歯車メニューの「使用量が多くなったら通知」で有効にする（既定 OFF。有効にするときに通知の許可を求め、拒否済みなら通知設定を開く）。
+各ゲージが 80% / 95% を超えたら 1 度だけ通知し、判定は取得結果（`UsageStore.refresh` の完了時）を見るだけで取得は増やさない。
+ただしパネルを閉じている間こそ要る機能なので、有効な間は非表示でもウィジェットの有無に関わらず 600s ごとに取得する。
+
+- 判定は `UsageAlertLevels`（通知センターに触れない純粋な struct。`UsageAlertLevelsTests` で値を確かめている）。
+  通知済みの段階はゲージ（`service|Gauge.key`）ごとに UserDefaults に持ち、再起動しても同じ枠で再通知しない。
+  `Gauge.label` は翻訳されるので、言語を切り替えても同じゲージと分かるよう API の枠の種別を `key` に入れて使う
+- 有効の設定は起動時とパネルを開くたびに通知の許可と突き合わせ、システム設定で取り消されていたら無効に戻す
+  （`reconcileWithAuthorization`。残すと通知は届かないのに 600s の取得だけ続く）
+- 枠の切り替わりはリセット日時ではなく**使用率が 5 ポイント以上下がったこと**で判定する。
+  Codex の 5h 枠はリセットまでの秒数で返るので、リセット日時が取得のたびにずれて同じ枠かどうか比べられない
+- `UNUserNotificationCenter` に触れるのは `activate()` 以降（`AppDelegate` が XCTest ホストの判定の後に呼ぶ）。
+  プレビュー用の `UsageStore(preview:...)` は `alerts` を持たない
 
 ### 表示項目の選択（`DisplayItem`）
 

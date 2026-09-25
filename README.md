@@ -29,6 +29,7 @@ cd usage-hud && scripts/install.sh
 - Click "System" to expand the memory breakdown and the top 5 apps by CPU and by memory (the process list is only collected while that section is open)
 - Pick what to show from "Display items" in the gear menu — anything you turn off is not fetched or sampled at all, so unused services cost nothing
 - Turn on "Launch at login" from the gear menu
+- Turn on "Notify when usage runs high" from the gear menu to get a notification when a limit (5h, weekly, monthly, …) passes 80% and 95% used. Each threshold fires once per window, and clicking the notification opens the panel. While it is on, usage is refreshed every 10 minutes even with the panel closed
 - Add the Notification Center widget from "Edit Widgets → Usage HUD"
 
 ## Display items

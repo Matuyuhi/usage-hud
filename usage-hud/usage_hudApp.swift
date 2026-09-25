@@ -36,6 +36,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // XCTest のホストとして起動されたときは何も始めない。
         // 取得(外部 CLI の起動・HTTP)やホットキー登録が走ると、テストの描画と無関係な副作用になる
         if ProcessInfo.processInfo.environment["XCTestSessionIdentifier"] != nil { return }
+        // 使用量の通知をクリックしたらパネルを出す(開いていればそのまま)
+        store.alerts?.activate { [weak self] in
+            guard let self, self.panel?.isVisible != true else { return }
+            self.showPanel()
+        }
         store.start()
         // 行数の変化で必要サイズが変わるため、snapshot とシステム指標の更新のたびに合わせ直す。
         // system は初回サンプルで行が増えるので、snapshot が変わらない経路でも見る必要がある

@@ -38,6 +38,10 @@ nonisolated struct Gauge: Codable, Identifiable {
     var label: String
     var usedPercent: Double
     var resetsAt: Date?
+    /// 表示言語に依らないゲージの識別子(API の枠の種別)。label は翻訳されるので、
+    /// 通知済みの記録のように言語を切り替えても同じゲージとして扱いたいものはこちらを使う。
+    /// 古い JSON には無いので optional
+    var key: String? = nil
 
     var remainingPercent: Double { max(0, 100 - usedPercent) }
 }

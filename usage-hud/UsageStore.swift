@@ -11,16 +11,23 @@ final class UsageStore: ObservableObject {
     @Published private(set) var isRefreshing = false
     /// 表示する項目。無効な項目は取得も行わない
     @Published private(set) var enabled: Set<DisplayItem> = DisplayPreferences.load()
+    /// 使用量の通知が有効か。許可を求めた結果で決まるので、設定値ではなく実際の状態を持つ
+    @Published private(set) var alertsEnabled = false
 
     // 内部 API 2 つ(Claude / Copilot)に配慮して控えめな間隔にする(Claude で 429 実績あり)
     private static let visibleInterval: TimeInterval = 120
     private static let hiddenInterval: TimeInterval = 1800
+    /// 通知が有効なときの非表示中の間隔。30 分だと 5h 枠の逼迫に気付くのが遅すぎる
+    private static let alertInterval: TimeInterval = 600
     private static let systemInterval: TimeInterval = 2
     private static let minRefreshInterval: TimeInterval = 60
     private static let rateLimitCooldown: TimeInterval = 900
 
     private let sampler = SystemSampler()
+    /// 使用量の通知。テスト / プレビューでは持たない(通知センターに触れない)
+    let alerts: UsageAlerts?
     private var quotaTimer: Timer?
+    private var lastWidgetReload: Date?
     private var systemTimer: Timer?
     private var panelVisible = false
     /// メニュー表示中の一時停止。再描画が開いた NSMenu を組み直してしまうため、開いている間は更新しない
@@ -45,7 +52,11 @@ final class UsageStore: ObservableObject {
     private var processMetrics: Set<DisplayItem> { enabled.intersection([.cpu, .memory]) }
     private var needsProcesses: Bool { !processMetrics.isEmpty }
 
-    init() {}
+    init() {
+        let alerts = UsageAlerts()
+        self.alerts = alerts
+        alertsEnabled = alerts.isEnabled
+    }
 
     /// テスト / プレビュー用。取得もタイマーも動かさず、渡された値をそのまま表示する。
     /// 共有 JSON にも書かないので、実機の usage.json を汚さない
@@ -53,6 +64,8 @@ final class UsageStore: ObservableObject {
         preview snapshot: UsageSnapshot?, system: SystemSample?, processes: ProcessSample? = nil,
         enabled: Set<DisplayItem>
     ) {
+        // 初期値の無い let を先に埋める(埋める前は @Published の setter が呼べない)
+        alerts = nil
         self.snapshot = snapshot
         self.system = system
         self.processes = processes
@@ -63,6 +76,7 @@ final class UsageStore: ObservableObject {
         snapshot = SharedStore.load()
         refresh()
         rescheduleQuotaTimer()
+        reconcileAlerts()
     }
 
     func panelVisibilityChanged(visible: Bool) {
@@ -71,6 +85,7 @@ final class UsageStore: ObservableObject {
         rescheduleSystemTimer()
         if visible {
             refresh()
+            reconcileAlerts()
         }
     }
 
@@ -130,6 +145,31 @@ final class UsageStore: ObservableObject {
         }
     }
 
+    /// 使用量の通知の切り替え。有効にするときは通知の許可を求め、許可されなければ無効のまま
+    func setAlertsEnabled(_ isOn: Bool) {
+        guard let alerts else { return }
+        Task {
+            alertsEnabled = await alerts.setEnabled(isOn)
+            // 非表示中の定期取得は通知の有無で間隔が変わる
+            rescheduleQuotaTimer()
+            // 有効にした時点で既に超えているゲージは、次の取得を待たずに知らせる
+            if alertsEnabled, let snapshot {
+                alerts.evaluate(snapshot)
+            }
+        }
+    }
+
+    /// 通知の許可が取り消されていたら、表示と非表示中の取得間隔を合わせ直す
+    private func reconcileAlerts() {
+        guard let alerts, alerts.isEnabled else { return }
+        Task {
+            let enabled = await alerts.reconcileWithAuthorization()
+            guard enabled != alertsEnabled else { return }
+            alertsEnabled = enabled
+            rescheduleQuotaTimer()
+        }
+    }
+
     func refresh(force: Bool = false) {
         guard !isFetching else {
             // 取得中に有効化されたサービスは、今の取得では拾えないので終わり次第もう一度回す
@@ -158,6 +198,9 @@ final class UsageStore: ObservableObject {
                 fetchedAt: Date())
             isFetching = false
             syncRefreshingIndicator()
+            // 通知はパネルの再描画を伴わないので、メニュー表示中でも待たずに判定する。
+            // 取得中に無効化されたサービスを知らせないよう、今の選択で絞ってから見る
+            alerts?.evaluate(withCurrentSelection(fresh))
             applyOrDefer(fresh, sample: sample)
             if pendingRefresh {
                 pendingRefresh = false
@@ -213,6 +256,18 @@ final class UsageStore: ObservableObject {
         guard let newSnapshot else { return }
         snapshot = newSnapshot
         SharedStore.save(newSnapshot)
+        reloadWidgetIfNeeded()
+    }
+
+    /// 本体が前面に来ない(LSUIElement)ので、ここからの再読込は WidgetKit の 1 日あたりの予算に数えられる。
+    /// 通知のために非表示中も細かく取得する場合でも、非表示中の再読込は従来の hiddenInterval より細かくしない
+    /// (JSON は毎回書くので、その間もウィジェット自身の定期読込では新しい値が出る)
+    private func reloadWidgetIfNeeded() {
+        if !panelVisible, let last = lastWidgetReload,
+           Date().timeIntervalSince(last) < Self.hiddenInterval {
+            return
+        }
+        lastWidgetReload = Date()
         WidgetCenter.shared.reloadAllTimelines()
     }
 
@@ -285,6 +340,8 @@ final class UsageStore: ObservableObject {
         let timer = Timer(timeInterval: Self.systemInterval, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.sampleSystem() }
         }
+        // 多少ずれても表示には影響しないので、OS が他のタイマーと起床をまとめられるよう猶予を渡す(省電力)
+        timer.tolerance = Self.systemInterval * 0.1
         RunLoop.main.add(timer, forMode: .common)
         systemTimer = timer
     }
@@ -296,6 +353,9 @@ final class UsageStore: ObservableObject {
         guard !enabledServices.isEmpty, !updatesPaused else { return }
         if panelVisible {
             scheduleQuotaTimer(interval: Self.visibleInterval)
+        } else if alertsEnabled {
+            // 通知はパネルを閉じている間にこそ要るので、ウィジェットの有無に関わらず取り続ける
+            scheduleQuotaTimer(interval: Self.alertInterval)
         } else {
             // 非表示中の更新は widget の鮮度維持のためだけなので、widget 未設置なら止める。
             // 後から widget を追加した場合は、次にパネルを開閉した時点で再判定される
@@ -303,7 +363,7 @@ final class UsageStore: ObservableObject {
                 guard case .success(let configurations) = result, !configurations.isEmpty else { return }
                 Task { @MainActor in
                     guard let self, !self.panelVisible, self.quotaTimer == nil,
-                          !self.enabledServices.isEmpty else { return }
+                          !self.enabledServices.isEmpty, !self.updatesPaused else { return }
                     self.scheduleQuotaTimer(interval: Self.hiddenInterval)
                 }
             }
@@ -314,6 +374,7 @@ final class UsageStore: ObservableObject {
         let timer = Timer(timeInterval: interval, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.refresh() }
         }
+        timer.tolerance = interval * 0.1
         RunLoop.main.add(timer, forMode: .common)
         quotaTimer = timer
     }
