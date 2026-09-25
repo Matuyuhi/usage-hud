@@ -8,7 +8,7 @@ enum SampleData {
 
     static let claude = ServiceUsage(
         gauges: [
-            Gauge(label: "Session", usedPercent: 35, resetsAt: fetchedAt.addingTimeInterval(3 * 3600)),
+            Gauge(label: "Session", usedPercent: 35, resetsAt: fetchedAt.addingTimeInterval(3 * 3600), isShortWindow: true),
             Gauge(label: "Weekly", usedPercent: 62, resetsAt: fetchedAt.addingTimeInterval(4 * 86400)),
         ],
         detail: "Max 5x",
@@ -22,7 +22,7 @@ enum SampleData {
 
     static let codex = ServiceUsage(
         gauges: [
-            Gauge(label: "5h", usedPercent: 48, resetsAt: fetchedAt.addingTimeInterval(95 * 60)),
+            Gauge(label: "5h", usedPercent: 48, resetsAt: fetchedAt.addingTimeInterval(95 * 60), isShortWindow: true),
             Gauge(label: "Weekly", usedPercent: 12, resetsAt: fetchedAt.addingTimeInterval(5 * 86400)),
         ],
         detail: "Plus",

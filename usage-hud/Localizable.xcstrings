@@ -1,6 +1,16 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "%1$@ %2$@ %3$@ %4$@ (%5$@)" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ %2$@ %3$@ %4$@（%5$@）"
+          }
+        }
+      }
+    },
     "%@ left" : {
       "localizations" : {
         "ja" : {
@@ -67,6 +77,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "許可"
+          }
+        }
+      }
+    },
+    "Almost used up (%@ used)" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ほぼ使い切りました（%@ 使用）"
           }
         }
       }
@@ -197,6 +217,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "usage-hud を起動するとここに表示されます"
+          }
+        }
+      }
+    },
+    "Left (time until reset)" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "残り（リセットまで）"
           }
         }
       }
@@ -377,6 +407,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "リセット"
+          }
+        }
+      }
+    },
+    "Resets in %1$@ · %2$@" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "あと %1$@ でリセット · %2$@"
+          }
+        }
+      }
+    },
+    "Running low (%@ used)" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "残りが少なくなっています（%@ 使用）"
           }
         }
       }
@@ -731,42 +781,12 @@
         }
       }
     },
-    "until %@" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ まで"
-          }
-        }
-      }
-    },
     "Notify when usage runs high" : {
       "localizations" : {
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "使用量が多くなったら通知"
-          }
-        }
-      }
-    },
-    "%1$@ used · %2$@ left" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%1$@ 使用 · 残り %2$@"
-          }
-        }
-      }
-    },
-    "Resets %@" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ にリセット"
           }
         }
       }

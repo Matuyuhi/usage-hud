@@ -32,7 +32,7 @@ scripts/snapshot-test.sh --record-missing   # ケースを足したら、無い�
 上書きするので、ずれると困るのは `scripts/install.sh` で入れたローカルビルドだけ。
 だから手で pbxproj を編集せず `scripts/bump-version.sh` を通し、一致は `check-invariants.sh` が見張る。
 
-テストはスナップショットテストと、通知の判定（`UsageAlertLevelsTests` / `DailySummaryScheduleTests`）のような純粋なロジックの値のテスト（`usage-hud-tests/`）。CI（`.github/workflows/ci.yml`）は PR で
+テストはスナップショットテストと、通知の判定（`UsageAlertLevelsTests` / `DailySummaryScheduleTests` / `UsageNotificationTextTests`）のような純粋なロジックの値のテスト（`usage-hud-tests/`）。CI（`.github/workflows/ci.yml`）は PR で
 universal Release ビルド・上のチェック・スナップショットテストを回す。データ取得の振る舞いは実行して確認する:
 
 - `~/Library/Application Support/usage-hud/usage.json` に 3 サービスの gauges がエラーなしで入ること
@@ -58,6 +58,8 @@ universal Release ビルド・上のチェック・スナップショットテ�
   `PanelView(store:expanded:flatBackground:requestResize:)`（素材はウィンドウの裏側が無いと描けないので
   不透明背景に差し替える）、`UsageWidgetView(snapshot:family:)`（環境の `widgetFamily` は書き込めないので引数で受ける。
   ウィジェットの描画本体を `shared/` に置いているのはこのため。extension はテストのホストになれない）
+- 通知は通知センターそのものを描けないので、文面（`UsageNotificationText`）を macOS のバナーに似せた枠に流し込んで撮る（`notification-*`）。
+  文面を変えたら PR のスナップショットで見え方を確かめる
 - XCTest のホストとして起動されたときは `AppDelegate` が何も始めない（`XCTestSessionIdentifier` を見る）
 - **README の画像（`docs/panel.png` / `docs/panel.ja.png`）は参照画像のコピー**（`panel-default.*.dark.png`）。
   `scripts/sync-readme-images.sh` が作り、Record snapshots が撮り直しのたびに呼ぶ。実機スクショは撮らない。
@@ -99,6 +101,9 @@ universal Release ビルド・上のチェック・スナップショットテ�
   Timer はスリープ中を数えないので `didWakeNotification` で張り直す（起床直後は 60 秒待つ）。出した日時を UserDefaults に持って同じ回に二度出さない。
   取得に失敗したサービス（前回値が残っているだけ）は載せない。載せる枠が無かった回は出したことにせず、
   600s 後に取り直す（6 回まで。閾値の通知が無効でウィジェットも無いと、非表示中は他に取得が走らないため）（`DailySummaryScheduleTests`）
+- 文面は `UsageNotificationText`（通知センターに触れない）が組み立てる。バナーは本文の先頭数行で切れるので、
+  閾値の通知は残り % をタイトルに、段階と使用率をサブタイトルに、リセットまでの時間を本文に置く。
+  まとめ通知は枠ごとに折り返さない長さの 1 行（`🟡 Claude Code Weekly 38%（4d）`）で、パネルのバーと同じ境目の色の絵文字（🟢🟡🔴）を付けて残りの少ない順に並べる。何の数字かはサブタイトルで 1 度だけ言う
 - `UNUserNotificationCenter` に触れるのは `activate()` 以降（`AppDelegate` が XCTest ホストの判定の後に呼ぶ）。
   プレビュー用の `UsageStore(preview:...)` は `alerts` を持たない
 

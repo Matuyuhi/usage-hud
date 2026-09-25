@@ -81,8 +81,8 @@ final class UsageAlerts: NSObject, UNUserNotificationCenterDelegate {
                 // 翻訳される label ではなく key で覚える(言語を切り替えると同じ枠で再通知してしまう)
                 let key = "\(service.rawValue)|\(gauge.key ?? gauge.label)"
                 let before = levels.notified
-                if levels.update(key: key, usedPercent: gauge.usedPercent) != nil {
-                    post(service: service, gauge: gauge)
+                if let level = levels.update(key: key, usedPercent: gauge.usedPercent) {
+                    post(service: service, gauge: gauge, level: level)
                 }
                 changed = changed || levels.notified != before
             }
@@ -92,16 +92,9 @@ final class UsageAlerts: NSObject, UNUserNotificationCenterDelegate {
         }
     }
 
-    private func post(service: DisplayItem, gauge: Gauge) {
-        let content = UNMutableNotificationContent()
-        content.title = "\(service.title) · \(gauge.label)"
-        var lines = [String(
-            format: String(localized: "%1$@ used · %2$@ left"),
-            percentText(gauge.usedPercent), percentText(gauge.remainingPercent))]
-        if let resets = gauge.resetsAt {
-            lines.append(String(format: String(localized: "Resets %@"), formatDetailDate(resets)))
-        }
-        content.body = lines.joined(separator: "\n")
+    private func post(service: DisplayItem, gauge: Gauge, level: Double) {
+        let content = UsageNotificationText.threshold(service: service, gauge: gauge, level: level, now: Date())
+            .content()
         content.sound = .default
         // 同じゲージの通知は差し替える(80% の通知の後に 95% が来たら 1 件にまとめる)。
         // 同じ identifier で add しても差し替わるのは配信前の要求だけなので、配信済みのものは先に消す
@@ -122,27 +115,8 @@ final class UsageAlerts: NSObject, UNUserNotificationCenterDelegate {
     /// 載せる枠が 1 つも無い(取得に失敗した等)ときは出したことにせず、次の取得で出し直す
     func postSummaryIfDue(_ snapshot: UsageSnapshot, now: Date = Date()) -> Bool {
         guard isSummaryEnabled, DailySummarySchedule.isDue(now: now, lastSent: summaryLastSent) else { return false }
-        let services: [(DisplayItem, ServiceUsage?)] = [
-            (.claude, snapshot.claude), (.codex, snapshot.codex), (.copilot, snapshot.copilot),
-        ]
-        var lines: [String] = []
-        // 取得に失敗したサービスは前回値が残っているだけなので載せない(古い値で「今日の分」を済ませない)
-        for (service, usage) in services where usage?.error == nil {
-            // 5h 枠は数時間で戻るので、朝に知らせても意味が無い
-            for gauge in usage?.gauges ?? [] where gauge.isShortWindow != true {
-                var line = String(
-                    format: String(localized: "%1$@ · %2$@: %3$@ left"),
-                    service.title, gauge.label, percentText(gauge.remainingPercent))
-                if let resets = gauge.resetsAt {
-                    line += " · " + String(format: String(localized: "until %@"), formatDetailDate(resets))
-                }
-                lines.append(line)
-            }
-        }
-        guard !lines.isEmpty else { return false }
-        let content = UNMutableNotificationContent()
-        content.title = String(localized: "Daily usage summary")
-        content.body = lines.joined(separator: "\n")
+        guard let text = UsageNotificationText.summary(snapshot, now: now) else { return false }
+        let content = text.content()
         // 前日のまとめは差し替える(通知センターに毎日溜めない)
         let identifier = "usage-summary"
         let center = UNUserNotificationCenter.current()
@@ -166,6 +140,98 @@ final class UsageAlerts: NSObject, UNUserNotificationCenterDelegate {
         _ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse
     ) async {
         onOpen?()
+    }
+}
+
+/// 通知の文面。通知センターに触れない純粋な組み立てなので、スナップショットテストでバナー風に描いて見た目を確かめる。
+///
+/// バナーは本文の先頭 2 行ほどしか見えないので、一番知りたいこと(残り何 %)をタイトルに入れ、
+/// まとめ通知は残りの少ない枠から、折り返さない長さの 1 行ずつで並べる
+struct UsageNotificationText: Equatable {
+    var title: String
+    var subtitle = ""
+    var body: String
+
+    func content() -> UNMutableNotificationContent {
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.subtitle = subtitle
+        content.body = body
+        return content
+    }
+
+    /// 閾値を超えたゲージの通知。`level` は超えた閾値(`UsageAlertLevels.thresholds` のどれか)
+    static func threshold(service: DisplayItem, gauge: Gauge, level: Double, now: Date) -> Self {
+        let used = percentText(gauge.usedPercent)
+        let subtitle = level >= (UsageAlertLevels.thresholds.last ?? 95)
+            ? String(format: String(localized: "Almost used up (%@ used)"), used)
+            : String(format: String(localized: "Running low (%@ used)"), used)
+        return Self(
+            title: gaugeText(service: service, gauge: gauge),
+            subtitle: subtitle,
+            body: gauge.resetsAt.map {
+                String(format: String(localized: "Resets in %1$@ · %2$@"), untilText($0, now: now), formatDetailDate($0))
+            } ?? "")
+    }
+
+    /// 1 日 1 回のまとめ通知。載せる枠が 1 つも無ければ nil
+    static func summary(_ snapshot: UsageSnapshot, now: Date) -> Self? {
+        let services: [(DisplayItem, ServiceUsage?)] = [
+            (.claude, snapshot.claude), (.codex, snapshot.codex), (.copilot, snapshot.copilot),
+        ]
+        var gauges: [(DisplayItem, Gauge)] = []
+        // 取得に失敗したサービスは前回値が残っているだけなので載せない(古い値で「今日の分」を済ませない)
+        for (service, usage) in services where usage?.error == nil {
+            // 5h 枠は数時間で戻るので、朝に知らせても意味が無い
+            for gauge in usage?.gauges ?? [] where gauge.isShortWindow != true {
+                gauges.append((service, gauge))
+            }
+        }
+        guard !gauges.isEmpty else { return nil }
+        // 残りの少ない枠を上に。バナーで切れても危ない枠は見える(同じ残りならサービスの順のまま)
+        let lines = gauges.enumerated()
+            .sorted { ($0.element.1.remainingPercent, $0.offset) < ($1.element.1.remainingPercent, $1.offset) }
+            .map { entry -> String in
+                let (service, gauge) = entry.element
+                let mark = severityMark(gauge.usedPercent)
+                let remaining = percentText(gauge.remainingPercent)
+                guard let resets = gauge.resetsAt else {
+                    return "\(mark) \(service.title) \(gauge.label) \(remaining)"
+                }
+                return String(
+                    format: String(localized: "%1$@ %2$@ %3$@ %4$@ (%5$@)"),
+                    mark, service.title, gauge.label, remaining, untilText(resets, now: now))
+            }
+        // 1 行に収めるため、行には数字だけを置き、何の数字かはサブタイトルで 1 度だけ言う
+        return Self(
+            title: String(localized: "Daily usage summary"),
+            subtitle: String(localized: "Left (time until reset)"),
+            body: lines.joined(separator: "\n"))
+    }
+
+    /// 「Claude Code · Session: 残り 4%」
+    private static func gaugeText(service: DisplayItem, gauge: Gauge) -> String {
+        String(
+            format: String(localized: "%1$@ · %2$@: %3$@ left"),
+            service.title, gauge.label, percentText(gauge.remainingPercent))
+    }
+
+    /// 通知は文字しか出せないので、パネルのバーと同じ色分けを絵文字で付ける(`DesignTokens.usageColor` と同じ境目)
+    static func severityMark(_ usedPercent: Double) -> String {
+        switch usedPercent / 100 {
+        case ..<DesignTokens.usageWarnFraction: "🟢"
+        case ..<DesignTokens.usageDangerFraction: "🟡"
+        default: "🔴"
+        }
+    }
+
+    /// リセットまでの残り時間。「1/6 03:04」より「4d 0h」のほうが、あとどれだけ持たせればよいか読みやすい
+    static func untilText(_ date: Date, now: Date) -> String {
+        let minutes = max(0, Int(date.timeIntervalSince(now) / 60))
+        let days = minutes / (24 * 60)
+        guard days > 0 else { return durationText(minutes) }
+        let hours = (minutes % (24 * 60)) / 60
+        return hours > 0 ? "\(days)d \(hours)h" : "\(days)d"
     }
 }
 
