@@ -75,6 +75,7 @@ universal Release ビルド・上のチェック・スナップショットテ�
 
 データの流れ: `Fetchers.swift`（3 サービス並列取得）→ `UsageStore`（@MainActor、タイマー管理: パネル表示中 120s / 非表示 1800s（通知が有効なら 600s）/ システム指標 2s）→ `SharedStore.save()` → ウィジェットの `TimelineProvider` が読む。
 タイマーには間隔の 10% の `tolerance` を付けて、OS が起床をまとめられるようにしている。
+`TimeZone.current` は常駐中のタイムゾーン変更に追従しないことがあるので、取得のたびに `NSTimeZone.resetSystemTimeZone()` で読み直す。
 
 本体は前面に来ない（LSUIElement）ので、`reloadAllTimelines()` は WidgetKit の 1 日あたりの再読込予算に数えられる。
 非表示中の再読込は `hiddenInterval` より細かくしない（`UsageStore.reloadWidgetIfNeeded`。JSON は毎回書く）。

@@ -183,6 +183,8 @@ final class UsageStore: ObservableObject {
         }
         isFetching = true
         syncRefreshingIndicator()
+        // TimeZone.current はキャッシュされ、常駐中のタイムゾーン変更に追従しないことがある
+        NSTimeZone.resetSystemTimeZone()
         Task {
             // 無効なサービスは fetch 自体を呼ばない(CLI の起動も HTTP 呼び出しも発生しない)
             async let claude = fetchService(.claude, current: snapshot?.claude, using: ClaudeFetcher.fetch)
