@@ -30,7 +30,7 @@ cd usage-hud && scripts/install.sh
 - Pick what to show from "Display items" in the gear menu — anything you turn off is not fetched or sampled at all, so unused services cost nothing
 - Turn on "Launch at login" from the gear menu
 - Turn on "Notify when usage runs high" from the gear menu to get a notification when a limit (5h, weekly, monthly, …) passes 80% and 95% used. Each threshold fires once per window, and clicking the notification opens the panel. While it is on, usage is refreshed every 10 minutes even with the panel closed
-- Turn on "Daily summary of weekly limits" to get one notification a day (at the first refresh after 9:00) listing how much is left in each weekly / monthly limit and when it resets (5h windows are left out)
+- Turn on "Daily summary of weekly limits" to get one notification a day (at the first refresh after 9:00) listing how much is left in each weekly / monthly limit and how long until it resets, lowest first (5h windows are left out)
 - Add the Notification Center widget from "Edit Widgets → Usage HUD"
 
 ## Display items

@@ -113,3 +113,69 @@ final class WidgetSnapshotTests: XCTestCase {
         }
     }
 }
+
+/// 通知の文面の見た目。通知センターそのものは描けないので、macOS のバナーに似せた枠に
+/// `UsageNotificationText` を流し込んで描く(文面を変えたときに PR で before / after を見るため)。
+/// バナーは本文が数行で切れるが、ここでは切らずに全文を出す
+@MainActor
+final class NotificationSnapshotTests: XCTestCase {
+    private static let width: CGFloat = 344
+
+    private struct Banner: View {
+        let text: UsageNotificationText
+
+        var body: some View {
+            HStack(alignment: .top, spacing: 10) {
+                Image(nsImage: NSApp.applicationIconImage)
+                    .resizable()
+                    .frame(width: 32, height: 32)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(text.title).fontWeight(.semibold)
+                    if !text.subtitle.isEmpty {
+                        Text(text.subtitle)
+                    }
+                    if !text.body.isEmpty {
+                        Text(text.body).foregroundStyle(.secondary)
+                    }
+                }
+                .font(.system(size: 13))
+                .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 0)
+            }
+            .padding(12)
+            .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 16))
+            .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(.separator))
+            .padding(12)
+            .frame(width: NotificationSnapshotTests.width)
+            .background(Color(nsColor: .underPageBackgroundColor))
+        }
+    }
+
+    /// 80% を超えた(Copilot の月の枠)
+    func testThreshold() {
+        let gauge = SampleData.copilot.gauges[0]
+        let text = UsageNotificationText.threshold(
+            service: .copilot, gauge: gauge, level: 80, now: SampleData.fetchedAt)
+        assertSnapshot("notification-threshold") { Banner(text: text) }
+    }
+
+    /// 95% を超えた(Claude の 5h 枠。リセットまで数時間)
+    func testThresholdCritical() {
+        var gauge = SampleData.claude.gauges[0]
+        gauge.usedPercent = 96
+        let text = UsageNotificationText.threshold(
+            service: .claude, gauge: gauge, level: 95, now: SampleData.fetchedAt)
+        assertSnapshot("notification-threshold-critical") { Banner(text: text) }
+    }
+
+    /// 1 日 1 回のまとめ。5h 枠は載せず、残りの少ない枠から並ぶ
+    func testSummary() throws {
+        let text = try XCTUnwrap(UsageNotificationText.summary(SampleData.snapshot(), now: SampleData.fetchedAt))
+        assertSnapshot("notification-summary") { Banner(text: text) }
+    }
+
+    func testSummaryDark() throws {
+        let text = try XCTUnwrap(UsageNotificationText.summary(SampleData.snapshot(), now: SampleData.fetchedAt))
+        assertSnapshot("notification-summary", appearance: .dark) { Banner(text: text) }
+    }
+}
