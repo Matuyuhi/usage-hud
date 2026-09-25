@@ -32,7 +32,7 @@ scripts/snapshot-test.sh --record-missing   # ケースを足したら、無い�
 上書きするので、ずれると困るのは `scripts/install.sh` で入れたローカルビルドだけ。
 だから手で pbxproj を編集せず `scripts/bump-version.sh` を通し、一致は `check-invariants.sh` が見張る。
 
-テストはスナップショットテストと、通知の判定（`UsageAlertLevelsTests`）のような純粋なロジックの値のテスト（`usage-hud-tests/`）。CI（`.github/workflows/ci.yml`）は PR で
+テストはスナップショットテストと、通知の判定（`UsageAlertLevelsTests` / `DailySummaryScheduleTests`）のような純粋なロジックの値のテスト（`usage-hud-tests/`）。CI（`.github/workflows/ci.yml`）は PR で
 universal Release ビルド・上のチェック・スナップショットテストを回す。データ取得の振る舞いは実行して確認する:
 
 - `~/Library/Application Support/usage-hud/usage.json` に 3 サービスの gauges がエラーなしで入ること
@@ -93,6 +93,12 @@ universal Release ビルド・上のチェック・スナップショットテ�
   （`reconcileWithAuthorization`。残すと通知は届かないのに 600s の取得だけ続く）
 - 枠の切り替わりはリセット日時ではなく**使用率が 5 ポイント以上下がったこと**で判定する。
   Codex の 5h 枠はリセットまでの秒数で返るので、リセット日時が取得のたびにずれて同じ枠かどうか比べられない
+- **1 日 1 回のまとめ通知**（歯車メニューの「毎朝、週・月の枠の残りを通知」、既定 OFF・閾値の通知とは別の切り替え）。
+  9 時（`DailySummarySchedule.hour`）を過ぎてから最初の取得で、週 / 月の枠（`Gauge.isShortWindow != true`）の残りとリセット日時を 1 件にまとめる。
+  `UNCalendarNotificationTrigger` で予約しないのは中身を直前の取得結果で作るため。時刻に 1 回だけ取得するタイマー（`UsageStore.rescheduleSummaryTimer`）を張り、
+  Timer はスリープ中を数えないので `didWakeNotification` で張り直す（起床直後は 60 秒待つ）。出した日時を UserDefaults に持って同じ回に二度出さない。
+  取得に失敗したサービス（前回値が残っているだけ）は載せない。載せる枠が無かった回は出したことにせず、
+  600s 後に取り直す（6 回まで。閾値の通知が無効でウィジェットも無いと、非表示中は他に取得が走らないため）（`DailySummaryScheduleTests`）
 - `UNUserNotificationCenter` に触れるのは `activate()` 以降（`AppDelegate` が XCTest ホストの判定の後に呼ぶ）。
   プレビュー用の `UsageStore(preview:...)` は `alerts` を持たない
 

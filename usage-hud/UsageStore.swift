@@ -1,3 +1,4 @@
+import AppKit
 import Combine
 import Foundation
 import WidgetKit
@@ -13,6 +14,8 @@ final class UsageStore: ObservableObject {
     @Published private(set) var enabled: Set<DisplayItem> = DisplayPreferences.load()
     /// 使用量の通知が有効か。許可を求めた結果で決まるので、設定値ではなく実際の状態を持つ
     @Published private(set) var alertsEnabled = false
+    /// 1 日 1 回のまとめ通知が有効か。alertsEnabled と同じく実際の状態を持つ
+    @Published private(set) var summaryEnabled = false
 
     // 内部 API 2 つ(Claude / Copilot)に配慮して控えめな間隔にする(Claude で 429 実績あり)
     private static let visibleInterval: TimeInterval = 120
@@ -22,11 +25,20 @@ final class UsageStore: ObservableObject {
     private static let systemInterval: TimeInterval = 2
     private static let minRefreshInterval: TimeInterval = 60
     private static let rateLimitCooldown: TimeInterval = 900
+    /// スリープ明けにまとめ通知のための取得を待つ時間
+    private static let wakeSettleDelay: TimeInterval = 60
+    /// まとめ通知を出せなかった(取得に失敗した)ときに取り直す回数。間隔は alertInterval。
+    /// 閾値の通知が無効でウィジェットも無いと非表示中は他に取得が走らないので、ここで取り直す
+    private static let summaryMaxRetries = 6
 
     private let sampler = SystemSampler()
     /// 使用量の通知。テスト / プレビューでは持たない(通知センターに触れない)
     let alerts: UsageAlerts?
     private var quotaTimer: Timer?
+    /// まとめ通知の時刻に 1 回だけ取得するタイマー。定期取得の間隔とは独立に張る
+    private var summaryTimer: Timer?
+    private var summaryRetryCount = 0
+    private var wakeObserver: NSObjectProtocol?
     private var lastWidgetReload: Date?
     private var systemTimer: Timer?
     private var panelVisible = false
@@ -56,6 +68,7 @@ final class UsageStore: ObservableObject {
         let alerts = UsageAlerts()
         self.alerts = alerts
         alertsEnabled = alerts.isEnabled
+        summaryEnabled = alerts.isSummaryEnabled
     }
 
     /// テスト / プレビュー用。取得もタイマーも動かさず、渡された値をそのまま表示する。
@@ -76,7 +89,15 @@ final class UsageStore: ObservableObject {
         snapshot = SharedStore.load()
         refresh()
         rescheduleQuotaTimer()
+        rescheduleSummaryTimer()
         reconcileAlerts()
+        // Timer はスリープ中の時間を数えないので、時刻をまたいで寝ていたら起きた時点で張り直す。
+        // 起きた直後はネットワークが戻っておらず取得に失敗しやすいので、少し待ってから取る
+        wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in self?.rescheduleSummaryTimer(delay: Self.wakeSettleDelay) }
+        }
     }
 
     func panelVisibilityChanged(visible: Bool) {
@@ -134,6 +155,7 @@ final class UsageStore: ObservableObject {
         }
         DisplayPreferences.save(enabled)
         rescheduleQuotaTimer()
+        rescheduleSummaryTimer()
         rescheduleSystemTimer()
         if item.category == .system {
             // 有効化した指標は rescheduleSystemTimer 側で即時サンプリング済み
@@ -159,14 +181,26 @@ final class UsageStore: ObservableObject {
         }
     }
 
+    /// 1 日 1 回のまとめ通知の切り替え。許可の扱いは setAlertsEnabled と同じ
+    func setSummaryEnabled(_ isOn: Bool) {
+        guard let alerts else { return }
+        Task {
+            summaryEnabled = await alerts.setSummaryEnabled(isOn)
+            // 初めて有効にしたときは時刻を過ぎていればその場で 1 度出す(タイマーが即座に発火して取得する)
+            rescheduleSummaryTimer()
+        }
+    }
+
     /// 通知の許可が取り消されていたら、表示と非表示中の取得間隔を合わせ直す
     private func reconcileAlerts() {
-        guard let alerts, alerts.isEnabled else { return }
+        guard let alerts, alerts.isEnabled || alerts.isSummaryEnabled else { return }
         Task {
-            let enabled = await alerts.reconcileWithAuthorization()
-            guard enabled != alertsEnabled else { return }
-            alertsEnabled = enabled
+            await alerts.reconcileWithAuthorization()
+            guard alerts.isEnabled != alertsEnabled || alerts.isSummaryEnabled != summaryEnabled else { return }
+            alertsEnabled = alerts.isEnabled
+            summaryEnabled = alerts.isSummaryEnabled
             rescheduleQuotaTimer()
+            rescheduleSummaryTimer()
         }
     }
 
@@ -202,7 +236,17 @@ final class UsageStore: ObservableObject {
             syncRefreshingIndicator()
             // 通知はパネルの再描画を伴わないので、メニュー表示中でも待たずに判定する。
             // 取得中に無効化されたサービスを知らせないよう、今の選択で絞ってから見る
-            alerts?.evaluate(withCurrentSelection(fresh))
+            let selected = withCurrentSelection(fresh)
+            alerts?.evaluate(selected)
+            // まとめ通知は時刻を過ぎてから最初の取得で出す。出したら次の日の時刻に張り直す
+            if alerts?.postSummaryIfDue(selected) == true {
+                rescheduleSummaryTimer()
+            } else if alerts?.isSummaryDue == true, summaryTimer?.isValid != true,
+                      summaryRetryCount < Self.summaryMaxRetries {
+                // 出せなかった回は少し置いて取り直す(待っている間に走った他の取得で出せればそれで済む)
+                summaryRetryCount += 1
+                rescheduleSummaryTimer(delay: Self.alertInterval, isRetry: true)
+            }
             applyOrDefer(fresh, sample: sample)
             if pendingRefresh {
                 pendingRefresh = false
@@ -370,6 +414,24 @@ final class UsageStore: ObservableObject {
                 }
             }
         }
+    }
+
+    /// まとめ通知の時刻に取得を 1 回走らせる。取得の完了時に `postSummaryIfDue` が出すので、ここでは取るだけ。
+    /// 載せる枠が無く出せなかった回は、refresh の完了時に alertInterval 後の取り直しとして張り直す(summaryMaxRetries 回まで)
+    private func rescheduleSummaryTimer(delay: TimeInterval = 0, isRetry: Bool = false) {
+        if !isRetry { summaryRetryCount = 0 }
+        summaryTimer?.invalidate()
+        summaryTimer = nil
+        guard let alerts, alerts.isSummaryEnabled, !enabledServices.isEmpty else { return }
+        let fireAt = max(
+            DailySummarySchedule.nextFire(now: Date(), lastSent: alerts.summaryLastSent),
+            Date().addingTimeInterval(delay))
+        let timer = Timer(fire: fireAt, interval: 0, repeats: false) { [weak self] _ in
+            Task { @MainActor in self?.refresh(force: true) }
+        }
+        timer.tolerance = 60
+        RunLoop.main.add(timer, forMode: .common)
+        summaryTimer = timer
     }
 
     private func scheduleQuotaTimer(interval: TimeInterval) {

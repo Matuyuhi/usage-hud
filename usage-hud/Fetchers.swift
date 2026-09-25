@@ -75,7 +75,8 @@ enum ClaudeFetcher {
                 key += ":" + (model ?? "")
             default: continue
             }
-            gauges.append(Gauge(label: label, usedPercent: percent, resetsAt: resets, key: key))
+            gauges.append(Gauge(
+                label: label, usedPercent: percent, resetsAt: resets, key: key, isShortWindow: kind == "session"))
         }
         var details: [DetailItem] = gauges.compactMap { gauge in
             gauge.resetsAt.map {
@@ -155,9 +156,10 @@ enum CodexFetcher {
             guard let window = rateLimits[key] as? [String: Any],
                   let used = window["used_percent"] as? Double else { continue }
             let minutes = window["window_minutes"] as? Double ?? 0
-            let label = minutes >= 10000 ? String(localized: "Week") : String(localized: "5h")
+            let isWeek = minutes >= 10000
+            let label = isWeek ? String(localized: "Week") : String(localized: "5h")
             let resets = (window["resets_in_seconds"] as? Double).map { Date().addingTimeInterval($0) }
-            gauges.append(Gauge(label: label, usedPercent: used, resetsAt: resets, key: key))
+            gauges.append(Gauge(label: label, usedPercent: used, resetsAt: resets, key: key, isShortWindow: !isWeek))
         }
         let plan = rateLimits["planType"] as? String
         return ServiceUsage(gauges: gauges, detail: plan, error: nil, updatedAt: Date(), details: details)
