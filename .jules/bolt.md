@@ -26,3 +26,7 @@
 **Claim:** Bypassing the `/usr/bin/env` wrapper in `ProcessSession`, and replacing `NSString` bridging (`lastPathComponent`, `deletingPathExtension`) in `AppNames.resolve` / `BundleNameCache.read`, remove per-tick overhead.
 **Why it was rejected:** Neither site is hot. `ProcessSession` spawns at most once per 5s (`ps`, and only while the System section is expanded) and once per 120s / 1800s for the services, so a single `execve` of `env` is invisible — and replacing it with a `stat` walk over the search path trades it for syscalls of its own. `BundleNameCache.read` runs only on a cache miss (names are memoized for the process lifetime), and the non-bundle branch of `AppNames.resolve` covers a few dozen daemons. Both rewrites also reimplement `lastPathComponent` / `deletingPathExtension` edge cases by hand, and the `env` ones drop the localized error strings.
 **Action:** Attach a number. An optimization in this repo needs a profile or a before/after timing showing the site actually costs something; without one, prefer the existing code and its localization.
+
+## 2024-09-26 - Avoid String allocations in Substring replacements
+**Learning:** In Swift, calling `replacingOccurrences(of:with:)` on a `Substring` implicitly allocates a new `String` object, even if the target character is absent. In tight polling loops, this causes unnecessary allocations.
+**Action:** To avoid unnecessary allocations in tight polling loops, wrap the replacement in a `.contains()` check so it only allocates when necessary.
