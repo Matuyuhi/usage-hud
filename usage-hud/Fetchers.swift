@@ -1,5 +1,7 @@
 import Foundation
 
+private let secureSession = URLSession(configuration: .ephemeral)
+
 // MARK: - Claude Code
 
 enum ClaudeFetcher {
@@ -11,7 +13,7 @@ enum ClaudeFetcher {
             request.timeoutInterval = 10
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
             request.setValue("oauth-2025-04-20", forHTTPHeaderField: "anthropic-beta")
-            let (data, response) = try await URLSession.shared.data(for: request)
+            let (data, response) = try await secureSession.data(for: request)
             guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
                 let code = (response as? HTTPURLResponse)?.statusCode ?? -1
                 if code == 401 {
@@ -175,7 +177,7 @@ enum CopilotFetcher {
             var request = URLRequest(url: URL(string: "https://api.github.com/copilot_internal/user")!)
             request.timeoutInterval = 10
             request.setValue("token \(token)", forHTTPHeaderField: "Authorization")
-            let (data, response) = try await URLSession.shared.data(for: request)
+            let (data, response) = try await secureSession.data(for: request)
             guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
                 let code = (response as? HTTPURLResponse)?.statusCode ?? -1
                 if code == 429 {
