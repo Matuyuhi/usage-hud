@@ -10,6 +10,8 @@ name: Release
 # 前提シークレット: HOMEBREW_TAP_TOKEN
 #   Matuyuhi/homebrew-tools への書き込み権を持つ PAT（fine-grained: Contents=R/W）。
 #   未設定なら update-tap はスキップ（publish までは走る）。
+# 任意シークレット: CLAUDE_CODE_OAUTH_TOKEN
+#   publish 後のリリースノート生成（.github/actions/release-notes）に使う。未設定ならスキップ。
 
 on:
   push:
@@ -88,9 +90,15 @@ jobs:
         run: gh release upload "v$VER" usage-hud.zip --repo "$REPO" --clobber
 
   publish:
+    # 公開より前にノートを生成できないのは、draft の間はタグがまだ作られず
+    # `git log <prev>..v$VER` が引けないため（immutable になるのは資産だけで body は編集できる）。
     needs: [guard, build]
     if: needs.guard.outputs.release == 'true'
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: write       # gh release edit
+      pull-requests: read   # gh pr list / view
     steps:
       - name: Publish the release
         env:
@@ -98,6 +106,21 @@ jobs:
           REPO: ${{ github.repository }}
           VER: ${{ needs.guard.outputs.version }}
         run: gh release edit "v$VER" --repo "$REPO" --draft=false
+
+      # ローカル action は checkout 済みでないと解決できない。前リリースとの差分を引くため全履歴を取る
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      # ノート生成に失敗しても、公開済みリリース（--generate-notes の既定 body）と後段の update-tap は止めない
+      - name: Rewrite the release notes
+        continue-on-error: true
+        uses: ./.github/actions/release-notes
+        with:
+          tag: v${{ needs.guard.outputs.version }}
+          repository: ${{ github.repository }}
+          github-token: ${{ github.token }}
+          claude-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
 
   update-tap:
     needs: [guard, publish]
