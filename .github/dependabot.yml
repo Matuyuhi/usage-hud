@@ -3,7 +3,10 @@
 version: 2
 updates:
   - package-ecosystem: github-actions
-    directory: /
+    # 既定の / は workflows しか見ないので、composite action の中の uses も拾わせる
+    directories:
+      - /
+      - /.github/actions/*
     schedule:
       interval: monthly
     groups:
