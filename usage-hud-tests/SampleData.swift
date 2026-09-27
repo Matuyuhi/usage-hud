@@ -66,6 +66,14 @@ enum SampleData {
         return sample
     }
 
+    /// 充電中(バッテリーのバーが緑になる)
+    static var chargingSystem: SystemSample {
+        var sample = system
+        sample.battery = BatterySample(
+            percent: 64, isCharging: true, isPluggedIn: true, minutesToEmpty: nil, minutesToFull: 48, health: "Good")
+        return sample
+    }
+
     static let processes = ProcessSample(
         topCPU: [
             ProcessUsage(id: "/Applications/Xcode.app", name: "Xcode", cpuPercent: 142.3, memBytes: 6_400_000_000, processCount: 7),

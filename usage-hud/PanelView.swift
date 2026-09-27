@@ -148,6 +148,7 @@ struct PanelView: View {
                     label: row.label,
                     fraction: row.fraction,
                     severity: row.severity,
+                    charging: row.charging,
                     trailing: row.trailing,
                     subtitle: row.subtitle)
             }
@@ -208,6 +209,7 @@ struct PanelView: View {
         let label: String
         let fraction: Double?
         var severity: Double? = nil
+        var charging = false
         let trailing: String
         var subtitle: String? = nil
     }
@@ -230,6 +232,7 @@ struct PanelView: View {
                 fraction: battery.fraction,
                 // 残量は多いほど良いので、配色は「不足量」で判定する。給電中は警告色を出さない
                 severity: battery.isPluggedIn ? 0 : 1 - battery.fraction,
+                charging: battery.isCharging,
                 trailing: percentText(battery.percent),
                 subtitle: batterySubtitle(battery))
         case .disk:
@@ -262,14 +265,15 @@ struct PanelView: View {
 
     // GridRow は Grid の直接の子である必要があるため、行はメソッドで組む(View に包まない)
     private func gaugeRow(
-        label: String, fraction: Double?, severity: Double? = nil, trailing: String, subtitle: String?
+        label: String, fraction: Double?, severity: Double? = nil, charging: Bool = false,
+        trailing: String, subtitle: String?
     ) -> some View {
         GridRow {
             Text(label)
                 .font(.caption)
                 .foregroundStyle(.secondary)
             if let fraction {
-                UsageBar(fraction: fraction, severity: severity)
+                UsageBar(fraction: fraction, severity: severity, charging: charging)
             } else {
                 Color.clear.frame(height: DesignTokens.barHeight)
             }

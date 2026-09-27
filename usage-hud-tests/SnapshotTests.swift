@@ -63,6 +63,14 @@ final class PanelSnapshotTests: XCTestCase {
             preview: SampleData.snapshot(enabled: enabled), system: SampleData.system, enabled: enabled)
         assertSnapshot("panel-metrics-only") { panel(store) }
     }
+
+    /// 充電中はバッテリーのバーの背景ごと緑になる
+    func testCharging() {
+        let enabled: Set<DisplayItem> = [.cpu, .memory, .battery]
+        let store = UsageStore(
+            preview: SampleData.snapshot(enabled: enabled), system: SampleData.chargingSystem, enabled: enabled)
+        assertSnapshot("panel-charging") { panel(store) }
+    }
 }
 
 @MainActor

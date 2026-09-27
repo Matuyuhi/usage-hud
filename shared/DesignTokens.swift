@@ -49,13 +49,19 @@ struct UsageBar: View {
     /// 色の判定に使う値。バッテリーのように「多いほど良い」指標では、
     /// バーの長さ(残量)とは別に不足量を渡して配色を揃える
     var severity: Double? = nil
+    /// 給電中。背景を緑に染め、バーも緑にして充電中と一目で分かるようにする
+    var charging: Bool = false
 
     var body: some View {
         GeometryReader { proxy in
             ZStack(alignment: .leading) {
-                Capsule().fill(.quaternary)
+                if charging {
+                    Capsule().fill(Color.green.opacity(0.25))
+                } else {
+                    Capsule().fill(.quaternary)
+                }
                 Capsule()
-                    .fill(DesignTokens.usageColor(fraction: severity ?? fraction))
+                    .fill(charging ? Color.green : DesignTokens.usageColor(fraction: severity ?? fraction))
                     .frame(width: max(height / 2, proxy.size.width * min(max(fraction, 0), 1)))
             }
         }
