@@ -18,3 +18,7 @@
 **Vulnerability:** `URLSession.shared` was used for HTTP requests to Anthropic and GitHub APIs. By default, `shared` uses a disk cache, which can inadvertently store HTTP requests and responses to the file system (`~/Library/Caches/...`). This could expose sensitive `Authorization` headers (containing API tokens) and user quota information.
 **Learning:** Default network sessions on macOS implicitly cache data to disk, posing a risk of sensitive information leakage for authenticated API requests.
 **Prevention:** Always use `URLSession(configuration: .ephemeral)` for API calls involving authentication tokens and sensitive user data to ensure nothing is written to the persistent disk cache.
+## 2026-09-27 - [Untrusted Search Path (CWE-426) Relative Path Bypass in ProcessSession]
+**Vulnerability:** While empty entries in the `PATH` environment variable were stripped to prevent `execvp` from resolving binaries against the current working directory, relative paths (e.g., `.`, `./bin`, `bin`) were still permitted. If a relative path is present in `PATH`, `execvp` can still resolve binaries in untrusted locations relative to the current working directory, leading to a CWE-426 Command Injection vulnerability.
+**Learning:** Stripping only empty entries from `PATH` is insufficient to prevent cwd-based command injection. All entries must be validated to ensure they are absolute paths.
+**Prevention:** Filter inherited `PATH` components to ensure they begin with `/` before using them to resolve commands.

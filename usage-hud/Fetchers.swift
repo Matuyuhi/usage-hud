@@ -360,10 +360,12 @@ nonisolated final class ProcessSession {
         process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
         process.arguments = [command] + arguments
         var environment = ProcessInfo.processInfo.environment
-        // 継承した PATH の空要素(`::` や末尾の `:`)は落とす。execvp は空要素を cwd として扱うため、
+        // 継承した PATH の空要素(`::` や末尾の `:`)や相対パスは落とす。execvp は空要素を cwd として扱うため、
         // 残すと起動元の作業ディレクトリに置かれた偽の実行ファイルを拾う余地になる(CWE-426)
         let path = (environment["PATH"] ?? "/usr/bin:/bin")
-            .split(separator: ":", omittingEmptySubsequences: true).joined(separator: ":")
+            .split(separator: ":", omittingEmptySubsequences: true)
+            .filter { $0.hasPrefix("/") }
+            .joined(separator: ":")
         environment["PATH"] = prependCustomPaths
             ? "\(NSHomeDirectory())/.local/bin:/opt/homebrew/bin:/usr/local/bin"
                 + (path.isEmpty ? "" : ":" + path)
