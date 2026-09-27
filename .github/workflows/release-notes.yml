@@ -1,6 +1,6 @@
 name: Release notes
 
-# 公開済みリリースの body を利用者向けのノートに書き換える（.github/actions/release-notes）。
+# 公開済みリリースの body（What's Changed）の直前に利用者向けのノートを書き足す（.github/actions/release-notes）。
 # release.yml の publish から `gh workflow run` で起動される。release.yml の中で直接呼ばないのは、
 # anthropics/claude-code-action@v1 が push イベントを扱えず "Unsupported event type: push"
 # で落ちるため（workflow_dispatch は automation イベントとして受け付けられる）。
