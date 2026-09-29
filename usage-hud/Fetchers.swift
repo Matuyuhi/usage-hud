@@ -382,7 +382,12 @@ nonisolated final class ProcessSession {
     }
 
     func send(_ line: String) {
-        stdinPipe.fileHandleForWriting.write(Data((line + "\n").utf8))
+        let data = Data((line + "\n").utf8)
+        if #available(macOS 10.15.4, *) {
+            try? stdinPipe.fileHandleForWriting.write(contentsOf: data)
+        } else {
+            stdinPipe.fileHandleForWriting.write(data)
+        }
     }
 
     /// needle を含む行(改行まで到達済み)が現れるまで stdout を読む

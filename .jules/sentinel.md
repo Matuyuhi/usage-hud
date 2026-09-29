@@ -22,3 +22,7 @@
 **Vulnerability:** While empty entries in the `PATH` environment variable were stripped to prevent `execvp` from resolving binaries against the current working directory, relative paths (e.g., `.`, `./bin`, `bin`) were still permitted. If a relative path is present in `PATH`, `execvp` can still resolve binaries in untrusted locations relative to the current working directory, leading to a CWE-426 Command Injection vulnerability.
 **Learning:** Stripping only empty entries from `PATH` is insufficient to prevent cwd-based command injection. All entries must be validated to ensure they are absolute paths.
 **Prevention:** Filter inherited `PATH` components to ensure they begin with `/` before using them to resolve commands.
+## 2026-09-29 - [Uncaught Exception (CWE-248) in ProcessSession]
+**Vulnerability:** `ProcessSession.send` uses the legacy `FileHandle.write(_:)` method. If the child process has already terminated or closed its standard input (a broken pipe), this method raises an Objective-C exception. Since Objective-C exceptions cannot be caught in Swift, this immediately crashes the application, resulting in a local Denial of Service (DoS).
+**Learning:** Legacy `FileHandle` APIs can raise uncaught exceptions on underlying I/O errors (like broken pipes), which are fatal in Swift applications.
+**Prevention:** Always use the modern, throwing `FileHandle.write(contentsOf:)` API (available from macOS 10.15.4) inside a `do/catch` block or with `try?` for safely handling I/O errors without crashing.
