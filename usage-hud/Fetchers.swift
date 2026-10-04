@@ -1,4 +1,5 @@
 import Foundation
+import Darwin
 
 private let secureSession = URLSession(configuration: .ephemeral)
 
@@ -386,7 +387,20 @@ nonisolated final class ProcessSession {
         if #available(macOS 10.15.4, *) {
             try? stdinPipe.fileHandleForWriting.write(contentsOf: data)
         } else {
-            stdinPipe.fileHandleForWriting.write(data)
+            let fd = stdinPipe.fileHandleForWriting.fileDescriptor
+            signal(SIGPIPE, SIG_IGN)
+            data.withUnsafeBytes { buffer in
+                guard let baseAddress = buffer.baseAddress else { return }
+                var bytesWritten = 0
+                while bytesWritten < buffer.count {
+                    let written = write(fd, baseAddress.advanced(by: bytesWritten), buffer.count - bytesWritten)
+                    if written < 0 {
+                        if errno == EINTR { continue }
+                        break
+                    }
+                    bytesWritten += written
+                }
+            }
         }
     }
 
