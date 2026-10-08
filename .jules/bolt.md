@@ -26,3 +26,9 @@
 **Claim:** Bypassing the `/usr/bin/env` wrapper in `ProcessSession`, and replacing `NSString` bridging (`lastPathComponent`, `deletingPathExtension`) in `AppNames.resolve` / `BundleNameCache.read`, remove per-tick overhead.
 **Why it was rejected:** Neither site is hot. `ProcessSession` spawns at most once per 5s (`ps`, and only while the System section is expanded) and once per 120s / 1800s for the services, so a single `execve` of `env` is invisible — and replacing it with a `stat` walk over the search path trades it for syscalls of its own. `BundleNameCache.read` runs only on a cache miss (names are memoized for the process lifetime), and the non-bundle branch of `AppNames.resolve` covers a few dozen daemons. Both rewrites also reimplement `lastPathComponent` / `deletingPathExtension` edge cases by hand, and the `env` ones drop the localized error strings.
 **Action:** Attach a number. An optimization in this repo needs a profile or a before/after timing showing the site actually costs something; without one, prefer the existing code and its localization.
+
+## 2024-08-15 - Avoid String allocation in Substring.replacingOccurrences
+
+**Learning:** In Swift, calling `replacingOccurrences(of:with:)` on a `Substring` implicitly allocates a new `String` object, even if the target character is absent. In tight polling loops processing hundreds of lines (like parsing `ps` output in `ProcessSampler`), this causes unnecessary heap allocations per tick.
+
+**Action:** Avoid unnecessary allocations by wrapping it in a `.contains(Character(...))` check. Additionally, when parsing numbers from a `Substring` where no replacement is needed, pass the `Substring` directly to `Double()` (e.g., `Double(substring)`) to avoid the overhead of allocating a new `String` object.
