@@ -386,7 +386,22 @@ nonisolated final class ProcessSession {
         if #available(macOS 10.15.4, *) {
             try? stdinPipe.fileHandleForWriting.write(contentsOf: data)
         } else {
-            stdinPipe.fileHandleForWriting.write(data)
+            let fd = stdinPipe.fileHandleForWriting.fileDescriptor
+            _ = fcntl(fd, F_SETNOSIGPIPE, 1)
+            data.withUnsafeBytes { buffer in
+                guard let baseAddress = buffer.baseAddress else { return }
+                var bytesLeft = buffer.count
+                var currentAddress = baseAddress
+                while bytesLeft > 0 {
+                    let bytesWritten = write(fd, currentAddress, bytesLeft)
+                    if bytesWritten < 0 {
+                        if errno == EINTR { continue }
+                        break
+                    }
+                    bytesLeft -= bytesWritten
+                    currentAddress += bytesWritten
+                }
+            }
         }
     }
 
