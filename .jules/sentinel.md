@@ -26,3 +26,7 @@
 **Vulnerability:** `ProcessSession.send` uses the legacy `FileHandle.write(_:)` method. If the child process has already terminated or closed its standard input (a broken pipe), this method raises an Objective-C exception. Since Objective-C exceptions cannot be caught in Swift, this immediately crashes the application, resulting in a local Denial of Service (DoS).
 **Learning:** Legacy `FileHandle` APIs can raise uncaught exceptions on underlying I/O errors (like broken pipes), which are fatal in Swift applications.
 **Prevention:** Always use the modern, throwing `FileHandle.write(contentsOf:)` API (available from macOS 10.15.4) inside a `do/catch` block or with `try?` for safely handling I/O errors without crashing.
+## 2026-10-12 - [Uncaught Exception (CWE-248) in Legacy API Fallback]
+**Vulnerability:** The fallback path for older deployment targets (pre-macOS 10.15.4) still used the legacy `FileHandle.write(_:)` method, which raises uncatchable Objective-C exceptions on broken pipes.
+**Learning:** Securing modern APIs with `#available` checks is insufficient if the fallback path retains the vulnerable legacy method.
+**Prevention:** For backward compatibility, implement a robust POSIX-based fallback (using `write()`, `F_SETNOSIGPIPE`, and `EINTR` retry loops) instead of relying on legacy Foundation APIs that raise fatal exceptions.
