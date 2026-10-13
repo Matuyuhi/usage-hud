@@ -386,7 +386,23 @@ nonisolated final class ProcessSession {
         if #available(macOS 10.15.4, *) {
             try? stdinPipe.fileHandleForWriting.write(contentsOf: data)
         } else {
-            stdinPipe.fileHandleForWriting.write(data)
+            // Prevent uncatchable Objective-C exception (CWE-248) on broken pipes in older macOS versions
+            let fd = stdinPipe.fileHandleForWriting.fileDescriptor
+            fcntl(fd, F_SETNOSIGPIPE, 1)
+            var bytesLeft = data.count
+            data.withUnsafeBytes { buffer in
+                guard let baseAddress = buffer.baseAddress else { return }
+                var ptr = baseAddress
+                while bytesLeft > 0 {
+                    let written = write(fd, ptr, bytesLeft)
+                    if written < 0 {
+                        if errno == EINTR { continue }
+                        break // Unrecoverable error
+                    }
+                    bytesLeft -= written
+                    ptr += written
+                }
+            }
         }
     }
 
