@@ -110,7 +110,12 @@ nonisolated enum ProcessSampler {
         if cpu {
             guard let field = nextField() else { return nil }
             // 小数点がロケールで "," になっても読めるようにする
-            cpuPercent = Double(field.replacingOccurrences(of: ",", with: ".")) ?? 0
+            // Optimize: avoid implicit String allocation if "," is absent
+            if field.contains(Character(",")) {
+                cpuPercent = Double(field.replacingOccurrences(of: ",", with: ".")) ?? 0
+            } else {
+                cpuPercent = Double(field) ?? 0
+            }
         }
         var memBytes: UInt64 = 0
         if memory {
