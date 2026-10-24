@@ -9,8 +9,17 @@ updates:
       - /.github/actions/*
     schedule:
       interval: monthly
+      # 毎月 1 日の朝（JST）に出す。既定の UTC だと夜中に PR が立つ
+      time: "09:00"
+      timezone: Asia/Tokyo
+    # 出たばかりの版は取らない。乗っ取られた Action のタグが差し替えられても、
+    # 数日のうちに見つかって取り下げられることが多いので、その間は待つ（供給網対策）
+    cooldown:
+      default-days: 7
     groups:
+      # minor / patch はまとめて 1 PR。major は破壊的変更があり得るので個別に出して中身を見る
       actions:
+        update-types: [minor, patch]
         patterns: ["*"]
     commit-message:
       prefix: "ci"
